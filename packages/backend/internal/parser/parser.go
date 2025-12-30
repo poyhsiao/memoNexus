@@ -106,15 +106,29 @@ func (p *ParserService) ParseURL(sourceURL string) (*ParseResult, error) {
 		return nil, fmt.Errorf("unsupported URL scheme: %s", parsedURL.Scheme)
 	}
 
-	// Fetch content
+	// Fetch content with enhanced error handling
 	resp, err := p.httpClient.Get(sourceURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %w", err)
+		// Distinguish timeout errors from connection errors
+		if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+			return nil, fmt.Errorf("request timeout: URL took too long to respond (>%s)", p.httpClient.Timeout)
+		}
+		return nil, fmt.Errorf("failed to fetch URL: %w (unreachable or invalid URL)", err)
 	}
 	defer resp.Body.Close()
 
+	// Enhanced HTTP error handling with specific messages
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		switch {
+		case resp.StatusCode >= 400 && resp.StatusCode < 500:
+			// Client errors (4xx) - resource not found or forbidden
+			return nil, fmt.Errorf("client error HTTP %d: %s (URL may not exist or requires authentication)", resp.StatusCode, resp.Status)
+		case resp.StatusCode >= 500:
+			// Server errors (5xx) - server issues
+			return nil, fmt.Errorf("server error HTTP %d: %s (remote server is experiencing issues)", resp.StatusCode, resp.Status)
+		default:
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		}
 	}
 
 	// Detect media type from URL
