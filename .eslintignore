@@ -1,0 +1,26 @@
+# MemoNexus .eslintignore
+
+# Build outputs
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Generated files
+*.generated.dart
+*.g.dart
+*.freezed.dart
+
+# Dart files (handled by flutter analyze)
+**/*.dart
+
+# Go files (handled by go vet)
+**/*.go
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+pubspec.lock
+go.sum

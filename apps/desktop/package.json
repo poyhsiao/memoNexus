@@ -1,0 +1,20 @@
+{
+  "name": "@memonexus/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MemoNexus Desktop Wrapper (optional distribution packaging)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "vue": "^3.4.15"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.3",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}
