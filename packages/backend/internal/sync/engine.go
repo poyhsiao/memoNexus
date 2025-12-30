@@ -189,12 +189,12 @@ func (e *SyncEngine) uploadChanges(ctx context.Context) (int, error) {
 		uploaded++
 
 		// Create change log
-		log := &models.ChangeLog{
-			ItemID:    string(item.ID),
+		changeLog := &models.ChangeLog{
+			ItemID:    item.ID,
 			Operation: "update",
 			Version:   item.Version,
 		}
-		if err := e.repo.CreateChangeLog(log); err != nil {
+		if err := e.repo.CreateChangeLog(changeLog); err != nil {
 			log.Printf("Failed to create change log: %v", err)
 		}
 	}
@@ -256,13 +256,13 @@ func (e *SyncEngine) downloadChanges(ctx context.Context) (int, error) {
 				downloaded++
 			} else if localItem.Version > item.Version {
 				// Local is newer, log conflict (will be resolved in next upload)
-				conflict := &models.ConflictLog{
-					ItemID:          string(item.ID),
+				conflictLog := &models.ConflictLog{
+					ItemID:          item.ID,
 					LocalTimestamp:  localItem.UpdatedAt,
 					RemoteTimestamp: item.UpdatedAt,
 					Resolution:      "last_write_wins",
 				}
-				if err := e.repo.CreateConflictLog(conflict); err != nil {
+				if err := e.repo.CreateConflictLog(conflictLog); err != nil {
 					log.Printf("Failed to create conflict log: %v", err)
 				}
 			}

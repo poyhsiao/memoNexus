@@ -144,8 +144,13 @@ func (c *S3Client) Delete(ctx context.Context, key string) error {
 // List lists all objects with a prefix.
 func (c *S3Client) List(ctx context.Context, prefix string) ([]string, error) {
 	// Create ListObjectsV2 request
-	listPath := c.config.BucketName + "?list-type=2&prefix=" + url.QueryEscape(prefix)
-	req, err := c.createRequest(ctx, http.MethodGet, listPath, nil)
+	// Note: For bucket-level operations like ListObjectsV2, the key is empty
+	// and query parameters are handled differently
+	queryParams := "?list-type=2"
+	if prefix != "" {
+		queryParams += "&prefix=" + url.QueryEscape(prefix)
+	}
+	req, err := c.createRequestForBucket(ctx, http.MethodGet, queryParams)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +221,87 @@ func (c *S3Client) createRequest(ctx context.Context, method, key string, body i
 	return req, nil
 }
 
+// createRequestForBucket creates a bucket-level S3 request with authentication.
+// Used for operations like ListObjectsV2 that operate on the bucket itself.
+func (c *S3Client) createRequestForBucket(ctx context.Context, method, queryParams string) (*http.Request, error) {
+	// Build URL for bucket-level operation
+	var urlStr string
+	if c.config.ForcePathStyle {
+		// Path-style: http://endpoint/bucket?params
+		urlStr = fmt.Sprintf("%s/%s%s", c.config.Endpoint, c.config.BucketName, queryParams)
+	} else {
+		// Virtual-host-style: http://bucket.endpoint?params
+		urlStr = fmt.Sprintf("%s.%s%s", c.config.BucketName, c.config.Endpoint, queryParams)
+	}
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, method, urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set host header for virtual-host style
+	if !c.config.ForcePathStyle {
+		req.Host = fmt.Sprintf("%s.%s", c.config.BucketName, c.config.Endpoint)
+	}
+
+	// Add AWS V4 signature headers
+	timestamp := time.Now().UTC()
+	amzDate := timestamp.Format("20060102T150405Z")
+
+	// Headers
+	req.Header.Set("Host", req.Host)
+	req.Header.Set("X-Amz-Date", amzDate)
+	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+
+	// Calculate signature (use empty key for bucket-level operations)
+	authorization := c.calculateAuthorizationForBucket(method, amzDate)
+	req.Header.Set("Authorization", authorization)
+
+	return req, nil
+}
+
+// calculateAuthorizationForBucket calculates AWS V4 signature for bucket-level operations.
+func (c *S3Client) calculateAuthorizationForBucket(method, amzDate string) string {
+	// This is a simplified version of AWS Signature V4 for bucket operations
+	// In production, use the full AWS V4 signing process
+
+	// Scope
+	dateStamp := amzDate[:8]
+	scope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, c.config.Region)
+
+	// Canonical request for bucket-level operation (no key)
+	canonicalURI := "/" + c.config.BucketName
+	canonicalQuery := ""
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-date:%s\n",
+		c.config.BucketName+"."+c.config.Endpoint, amzDate)
+	signedHeaders := "host;x-amz-date"
+
+	payloadHash := "UNSIGNED-PAYLOAD"
+
+	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
+		method, canonicalURI, canonicalQuery, canonicalHeaders, signedHeaders+" "+payloadHash)
+
+	// Create string to sign
+	algorithm := "AWS4-HMAC-SHA256"
+	credentialScope := scope
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s",
+		algorithm, amzDate, credentialScope, hex.EncodeToString(hashSHA256([]byte(canonicalRequest))))
+
+	// Calculate signature
+	kSecret := []byte("AWS4" + c.config.SecretKey)
+	kDate := hmacSHA256(kSecret, dateStamp)
+	kRegion := hmacSHA256(kDate, c.config.Region)
+	kService := hmacSHA256(kRegion, "s3")
+	kSigning := hmacSHA256(kService, "aws4_request")
+	signature := hex.EncodeToString(hmacSHA256(kSigning, stringToSign))
+
+	// Build authorization header
+	accessKey := c.config.AccessKey
+	return fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		algorithm, accessKey, scope, signedHeaders, signature)
+}
+
 // calculateAuthorization calculates AWS V4 signature authorization header.
 func (c *S3Client) calculateAuthorization(method, key, amzDate string) string {
 	// This is a simplified version of AWS Signature V4
@@ -280,9 +366,8 @@ func (c *S3Client) TestConnection(ctx context.Context) error {
 
 // GetBucketLocation gets the bucket location (region).
 func (c *S3Client) GetBucketLocation(ctx context.Context) (string, error) {
-	// Create GET bucket location request
-	locationPath := c.config.BucketName + "?location"
-	req, err := c.createRequest(ctx, http.MethodGet, locationPath, nil)
+	// Create GET bucket location request (bucket-level operation)
+	req, err := c.createRequestForBucket(ctx, http.MethodGet, "?location")
 	if err != nil {
 		return "", err
 	}

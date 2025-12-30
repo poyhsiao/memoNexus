@@ -183,7 +183,17 @@ func (p *ParserService) detectMediaTypeFromURL(sourceURL string) MediaType {
 		u = u[:i]
 	}
 
-	ext := strings.ToLower(u[strings.LastIndex(u, "."):])
+	// Guard against URLs without extensions
+	dotIdx := strings.LastIndex(u, ".")
+	if dotIdx < 0 {
+		return MediaTypeWeb
+	}
+	slashIdx := strings.LastIndex(u, "/")
+	if slashIdx > dotIdx {
+		return MediaTypeWeb
+	}
+
+	ext := strings.ToLower(u[dotIdx:])
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico":
 		return MediaTypeImage
@@ -227,7 +237,21 @@ func (p *ParserService) detectMediaTypeFromContentType(ct string) MediaType {
 
 // detectMediaTypeFromPath detects media type from file path extension.
 func (p *ParserService) detectMediaTypeFromPath(path string) MediaType {
-	ext := strings.ToLower(path[strings.LastIndex(path, "."):])
+	// Guard against paths without extensions
+	dotIdx := strings.LastIndex(path, ".")
+	if dotIdx < 0 {
+		return MediaTypeWeb
+	}
+	// Check if dot is in directory name (after last separator)
+	sepIdx := strings.LastIndex(path, "/")
+	if sepIdx == -1 {
+		sepIdx = strings.LastIndex(path, "\\")
+	}
+	if sepIdx > dotIdx {
+		return MediaTypeWeb
+	}
+
+	ext := strings.ToLower(path[dotIdx:])
 
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg":

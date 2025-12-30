@@ -224,24 +224,30 @@ func (r *Repository) UpdateTag(tag *models.Tag) error {
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if rows == 0 {
-		return fmt.Errorf("tag not found: %s", tag.ID)
+		return sql.ErrNoRows
 	}
 	return nil
 }
 
 // DeleteTag soft deletes a tag.
 func (r *Repository) DeleteTag(id string) error {
-	query := `UPDATE tags SET is_deleted = 1, updated_at = ? WHERE id = ?`
+	query := `UPDATE tags SET is_deleted = 1, updated_at = ? WHERE id = ? AND is_deleted = 0`
 	now := time.Now().Unix()
 	result, err := r.db.Exec(query, now, id)
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if rows == 0 {
-		return fmt.Errorf("tag not found: %s", id)
+		return sql.ErrNoRows
 	}
 	return nil
 }

@@ -11,6 +11,12 @@ import (
 	"golang.org/x/net/html"
 )
 
+// Pre-compiled regex patterns for performance
+var (
+	whitespaceRegex = regexp.MustCompile(`\s+`)
+	cjkRegex        = regexp.MustCompile(`[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]`)
+)
+
 // WebExtractor implements Extractor for web/HTML content.
 type WebExtractor struct {
 	// Minimum content length to consider valid
@@ -368,9 +374,8 @@ func (e *WebExtractor) extractTextByTag(doc *html.Node, tag string) string {
 
 // cleanText normalizes whitespace in text.
 func cleanText(s string) string {
-	// Replace multiple whitespace with single space
-	re := regexp.MustCompile(`\s+`)
-	s = re.ReplaceAllString(s, " ")
+	// Replace multiple whitespace with single space (using pre-compiled regex)
+	s = whitespaceRegex.ReplaceAllString(s, " ")
 
 	return strings.TrimSpace(s)
 }
@@ -383,8 +388,8 @@ func countWords(s string) int {
 
 // detectLanguage detects the language of text (heuristic).
 func detectLanguage(s string) string {
-	// Simple heuristic: check for CJK characters
-	hasCJK := regexp.MustCompile(`[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]`).MatchString(s)
+	// Simple heuristic: check for CJK characters (using pre-compiled regex)
+	hasCJK := cjkRegex.MatchString(s)
 
 	if hasCJK {
 		return "zh" // Default to Chinese for CJK (could be refined)
