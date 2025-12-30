@@ -216,6 +216,36 @@ func (r *Repository) ListTags() ([]*models.Tag, error) {
 	return tags, nil
 }
 
+// UpdateTag updates an existing tag.
+func (r *Repository) UpdateTag(tag *models.Tag) error {
+	tag.UpdatedAt = time.Now().Unix()
+	query := `UPDATE tags SET name = ?, color = ?, updated_at = ? WHERE id = ? AND is_deleted = 0`
+	result, err := r.db.Exec(query, tag.Name, tag.Color, tag.UpdatedAt, tag.ID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("tag not found: %s", tag.ID)
+	}
+	return nil
+}
+
+// DeleteTag soft deletes a tag.
+func (r *Repository) DeleteTag(id string) error {
+	query := `UPDATE tags SET is_deleted = 1, updated_at = ? WHERE id = ?`
+	now := time.Now().Unix()
+	result, err := r.db.Exec(query, now, id)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("tag not found: %s", id)
+	}
+	return nil
+}
+
 // =====================================================
 // ChangeLog Operations
 // =====================================================

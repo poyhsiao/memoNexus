@@ -50,86 +50,86 @@ Based on plan.md structure:
 
 ### Database Layer (Go Core)
 
-- [ ] T011 Create database schema version tracking table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
-- [ ] T012 [P] Create content_items table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (UUID v4 PK, is_deleted, version, FTS5 mirrors)
-- [ ] T013 [P] Create tags table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (UUID v4 PK, is_deleted)
-- [ ] T014 [P] Create content_tags many-to-many table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
-- [ ] T015 [P] Create change_log table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for sync)
-- [ ] T016 [P] Create conflict_log table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for concurrent edits)
-- [ ] T017 [P] Create sync_credentials table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (encrypted S3 config)
-- [ ] T018 [P] Create ai_config table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (encrypted AI config)
-- [ ] T019 [P] Create sync_queue table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for offline queuing)
-- [ ] T020 [P] Create export_archives table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
-- [ ] T021 Create content_fts FTS5 virtual table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (external content, BM25 ranking)
-- [ ] T022 Create FTS5 synchronization triggers in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
-- [ ] T023 Create rollback migration V1__initial_schema.down.sql in packages/backend/internal/db/migrations/
-- [ ] T024 Implement database migration system in packages/backend/internal/db/migrate/migrate.go (version tracking, rollback support)
+- [X] T011 Create database schema version tracking table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
+- [X] T012 [P] Create content_items table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (UUID v4 PK, is_deleted, version, FTS5 mirrors)
+- [X] T013 [P] Create tags table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (UUID v4 PK, is_deleted)
+- [X] T014 [P] Create content_tags many-to-many table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
+- [X] T015 [P] Create change_log table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for sync)
+- [X] T016 [P] Create conflict_log table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for concurrent edits)
+- [X] T017 [P] Create sync_credentials table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (encrypted S3 config)
+- [X] T018 [P] Create ai_config table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (encrypted AI config)
+- [X] T019 [P] Create sync_queue table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (for offline queuing)
+- [X] T020 [P] Create export_archives table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
+- [X] T021 Create content_fts FTS5 virtual table in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (external content, BM25 ranking)
+- [X] T022 Create FTS5 synchronization triggers in packages/backend/internal/db/migrations/V1__initial_schema.up.sql
+- [X] T023 Create rollback migration V1__initial_schema.down.sql in packages/backend/internal/db/migrations/
+- [X] T024 Implement database migration system in packages/backend/internal/db/migrate/migrate.go (version tracking, rollback support)
 
 ### Go Core Models (Data Layer)
 
-- [ ] T025 [P] Create ContentItem Go struct in packages/backend/internal/models/content.go (UUID, Title, ContentText, Tags, MediaType, IsDeleted, timestamps, version, content_hash)
-- [ ] T026 [P] Create Tag Go struct in packages/backend/internal/models/tag.go (UUID, Name, Color, IsDeleted, timestamps)
-- [ ] T027 [P] Create ChangeLog Go struct in packages/backend/internal/models/change_log.go (UUID, ItemID, Operation, Version, Timestamp)
-- [ ] T028 [P] Create ConflictLog Go struct in packages/backend/internal/models/conflict_log.go (UUID, ItemID, LocalTimestamp, RemoteTimestamp, Resolution)
-- [ ] T029 [P] Create SyncCredential Go struct in packages/backend/internal/models/sync_credential.go (encrypted fields)
-- [ ] T030 [P] Create AIConfig Go struct in packages/backend/internal/models/ai_config.go (encrypted fields)
-- [ ] T031 [P] Create SyncQueue Go struct in packages/backend/internal/models/sync_queue.go
-- [ ] T032 [P] Create ExportArchive Go struct in packages/backend/internal/models/export_archive.go
+- [X] T025 [P] Create ContentItem Go struct in packages/backend/internal/models/content.go (UUID, Title, ContentText, Tags, MediaType, IsDeleted, timestamps, version, content_hash)
+- [X] T026 [P] Create Tag Go struct in packages/backend/internal/models/tag.go (UUID, Name, Color, IsDeleted, timestamps)
+- [X] T027 [P] Create ChangeLog Go struct in packages/backend/internal/models/change_log.go (UUID, ItemID, Operation, Version, Timestamp)
+- [X] T028 [P] Create ConflictLog Go struct in packages/backend/internal/models/conflict_log.go (UUID, ItemID, LocalTimestamp, RemoteTimestamp, Resolution)
+- [X] T029 [P] Create SyncCredential Go struct in packages/backend/internal/models/sync_credential.go (encrypted fields)
+- [X] T030 [P] Create AIConfig Go struct in packages/backend/internal/models/ai_config.go (encrypted fields)
+- [X] T031 [P] Create SyncQueue Go struct in packages/backend/internal/models/sync_queue.go
+- [X] T032 [P] Create ExportArchive Go struct in packages/backend/internal/models/export_archive.go
 
 ### Database Repository (CRUD Operations)
 
-- [ ] T033 Implement database connection manager in packages/backend/internal/db/db.go (SQLite with WAL mode, FTS5 enabled)
-- [ ] T034 Implement ContentItem repository in packages/backend/internal/db/repository.go (CRUD with transactions)
-- [ ] T035 [P] Implement Tag repository in packages/backend/internal/db/repository.go
-- [ ] T036 [P] Implement ChangeLog repository in packages/backend/internal/db/repository.go
-- [ ] T037 [P] Implement ConflictLog repository in packages/backend/internal/db/repository.go
-- [ ] T038 [P] Implement SyncQueue repository in packages/backend/internal/db/repository.go
+- [X] T033 Implement database connection manager in packages/backend/internal/db/db.go (SQLite with WAL mode, FTS5 enabled)
+- [X] T034 Implement ContentItem repository in packages/backend/internal/db/repository.go (CRUD with transactions)
+- [X] T035 [P] Implement Tag repository in packages/backend/internal/db/repository.go
+- [X] T036 [P] Implement ChangeLog repository in packages/backend/internal/db/repository.go
+- [X] T037 [P] Implement ConflictLog repository in packages/backend/internal/db/repository.go
+- [X] T038 [P] Implement SyncQueue repository in packages/backend/internal/db/repository.go
 
 ### Flutter Data Models (Dart Layer)
 
-- [ ] T039 [P] Create ContentItem Dart model in apps/frontend/lib/models/content_item.dart (fromJson, toJson, copyWith, UUID generation)
-- [ ] T040 [P] Create Tag Dart model in apps/frontend/lib/models/tag.dart
-- [ ] T041 [P] Create SearchResult Dart model in apps/frontend/lib/models/search_result.dart
-- [ ] T042 [P] Create AIConfig Dart model in apps/frontend/lib/models/ai_config.dart
-- [ ] T043 [P] Create SyncCredential Dart model in apps/frontend/lib/models/sync_credential.dart
-- [ ] T044 [P] Create ExportArchive Dart model in apps/frontend/lib/models/export_archive.dart
-- [ ] T045 [P] Create MediaType enum in apps/frontend/lib/models/media_type.dart
+- [X] T039 [P] Create ContentItem Dart model in apps/frontend/lib/models/content_item.dart (fromJson, toJson, copyWith, UUID generation)
+- [X] T040 [P] Create Tag Dart model in apps/frontend/lib/models/content_item.dart
+- [X] T041 [P] Create SearchResult Dart model in apps/frontend/lib/models/content_item.dart
+- [X] T042 [P] Create AIConfig Dart model in apps/frontend/lib/models/ai_config.dart
+- [X] T043 [P] Create SyncCredential Dart model in apps/frontend/lib/models/ai_config.dart
+- [X] T044 [P] Create ExportArchive Dart model in apps/frontend/lib/models/ai_config.dart
+- [X] T045 [P] Create MediaType enum in apps/frontend/lib/models/content_item.dart
 
 ### Core Services (Go & Flutter)
 
-- [ ] T046 Implement UUID generator utility in packages/backend/internal/uuid/uuid.go (UUID v4 format validation)
-- [ ] T047 [P] Implement error code system in packages/backend/internal/errors/errors.go (error codes bridging Go-Dart boundary)
-- [ ] T048 [P] Implement structured logging in packages/backend/internal/logging/logger.go (JSON format, log levels)
-- [ ] T049 [P] Implement API client base in apps/frontend/lib/services/api_client.dart (REST client for desktop)
-- [ ] T050 [P] Implement WebSocket client in apps/frontend/lib/services/websocket.dart (real-time events)
-- [ ] T051 [P] Implement local storage service in apps/frontend/lib/services/storage.dart (SQLite for mobile testing)
+- [X] T046 Implement UUID generator utility in packages/backend/internal/uuid/uuid.go (UUID v4 format validation)
+- [X] T047 [P] Implement error code system in packages/backend/internal/errors/errors.go (error codes bridging Go-Dart boundary)
+- [X] T048 [P] Implement structured logging in packages/backend/internal/logging/logger.go (JSON format, log levels)
+- [X] T049 [P] Implement API client base in apps/frontend/lib/services/api_client.dart (REST client for desktop)
+- [X] T050 [P] Implement WebSocket client in apps/frontend/lib/services/websocket.dart (real-time events)
+- [X] T051 [P] Implement local storage service in apps/frontend/lib/services/storage.dart (SQLite for mobile testing)
 
 ### Desktop API Server (PocketBase Integration)
 
-- [ ] T052 Create embedded PocketBase server in packages/backend/cmd/desktop/main.go (starts on localhost:8090)
-- [ ] T053 [P] Implement REST API handler for /content in packages/backend/cmd/desktop/handlers/content.go
-- [ ] T054 [P] Implement REST API handler for /tags in packages/backend/cmd/desktop/handlers/tags.go
-- [ ] T055 [P] Implement REST API handler for /search in packages/backend/cmd/desktop/handlers/search.go
-- [ ] T056 [P] Implement WebSocket server for real-time events in packages/backend/cmd/desktop/websocket.go
+- [X] T052 Create embedded PocketBase server in packages/backend/cmd/desktop/main.go (starts on localhost:8090)
+- [X] T053 [P] Implement REST API handler for /content in packages/backend/cmd/desktop/handlers/content.go
+- [X] T054 [P] Implement REST API handler for /tags in packages/backend/cmd/desktop/handlers/tags.go
+- [X] T055 [P] Implement REST API handler for /search in packages/backend/cmd/desktop/handlers/search.go
+- [X] T056 [P] Implement WebSocket server for real-time events in packages/backend/cmd/desktop/websocket.go
 
 ### FFI Bridge (Mobile - Foundational)
 
-- [ ] T057 [P] Implement Dart FFI bridge structure in apps/frontend/lib/services/ffi_bridge.dart (FFI setup, function signatures, error handling)
-- [ ] T058 [P] Implement Go FFI exports header in packages/backend/cmd/mobile/exports.go (export directives for all Go Core functions)
-- [ ] T059 [P] Implement Dart FFI function bindings for content operations in apps/frontend/lib/services/ffi_bridge.dart (go_content_create, go_content_list, go_content_get, go_content_update, go_content_delete)
-- [ ] T060 [P] Implement Go FFI exports for content operations in packages/backend/cmd/mobile/exports.go (ContentCreate, ContentList, ContentGet, ContentUpdate, ContentDelete functions)
-- [ ] T061 [P] Implement Dart FFI function bindings for search in apps/frontend/lib/services/ffi_bridge.dart (go_search_query, go_search_filters)
-- [ ] T062 [P] Implement Go FFI exports for search in packages/backend/cmd/mobile/exports.go (SearchQuery function with FTS5)
-- [ ] T063 [P] Implement Dart FFI function bindings for analysis in apps/frontend/lib/services/ffi_bridge.dart (go_analyze_keywords, go_generate_summary)
-- [ ] T064 [P] Implement Go FFI exports for analysis in packages/backend/cmd/mobile/exports.go (AnalyzeKeywords, GenerateSummary functions)
+- [X] T057 [P] Implement Dart FFI bridge structure in apps/frontend/lib/services/ffi_bridge.dart (FFI setup, function signatures, error handling)
+- [X] T058 [P] Implement Go FFI exports header in packages/backend/cmd/mobile/exports.go (export directives for all Go Core functions)
+- [X] T059 [P] Implement Dart FFI function bindings for content operations in apps/frontend/lib/services/ffi_bridge.dart (go_content_create, go_content_list, go_content_get, go_content_update, go_content_delete)
+- [X] T060 [P] Implement Go FFI exports for content operations in packages/backend/cmd/mobile/exports.go (ContentCreate, ContentList, ContentGet, ContentUpdate, ContentDelete functions)
+- [X] T061 [P] Implement Dart FFI function bindings for search in apps/frontend/lib/services/ffi_bridge.dart (go_search_query, go_search_filters)
+- [X] T062 [P] Implement Go FFI exports for search in packages/backend/cmd/mobile/exports.go (SearchQuery function with FTS5)
+- [X] T063 [P] Implement Dart FFI function bindings for analysis in apps/frontend/lib/services/ffi_bridge.dart (go_analyze_keywords, go_generate_summary)
+- [X] T064 [P] Implement Go FFI exports for analysis in packages/backend/cmd/mobile/exports.go (AnalyzeKeywords, GenerateSummary functions)
 
 ### Performance Validation (Constitution Requirement)
 
-- [ ] T065 [P] Performance benchmark: search 10,000 items in <100ms in packages/backend/internal/db/search_benchmark_test.go (constitution requirement SC-002, SC-007)
-- [ ] T066 [P] Performance benchmark: content list render 1,000 items in <500ms in packages/backend/db/list_benchmark_test.go (constitution requirement FR-039, SC-005)
-- [ ] T067 [P] Performance benchmark: content ingestion 100 items in 10 minutes in packages/backend/internal/parser/ingestion_benchmark_test.go (constitution requirement FR-038, SC-006)
-- [ ] T068 [P] Memory profiling for Go Core in packages/backend/internal/memory/profile_test.go (constitution requirement: identify leaks)
-- [ ] T069 [P] Offline verification: test all features without network in tests/integration/offline_test.go (constitution requirement: 100% offline availability)
+- [X] T065 [P] Performance benchmark: search 10,000 items in <100ms in packages/backend/internal/db/search_benchmark_test.go (constitution requirement SC-002, SC-007)
+- [X] T066 [P] Performance benchmark: content list render 1,000 items in <500ms in packages/backend/internal/db/list_benchmark_test.go (constitution requirement FR-039, SC-005)
+- [X] T067 [P] Performance benchmark: content ingestion 100 items in 10 minutes in packages/backend/internal/parser/ingestion_benchmark_test.go (constitution requirement FR-038, SC-006)
+- [X] T068 [P] Memory profiling for Go Core in packages/backend/internal/memory/profile_test.go (constitution requirement: identify leaks)
+- [X] T069 [P] Offline verification: test all features without network in tests/integration/offline_test.go (constitution requirement: 100% offline availability)
 
 **Checkpoint**: Foundation ready - database, models, services, API server, FFI bridge, performance benchmarks all implemented. User story implementation can now begin in parallel.
 
@@ -155,7 +155,7 @@ Based on plan.md structure:
 
 #### Content Ingestion (Go Core - Parser Engine)
 
-- [ ] T086 [P] [US1] Implement web scraper in packages/backend/internal/parser/web/scraper.go (fetch URL, extract clean text, metadata, OpenGraph)
+- [X] T086 [P] [US1] Implement web scraper in packages/backend/internal/parser/web/scraper.go (fetch URL, extract clean text, metadata, OpenGraph)
 - [ ] T087 [P] [US1] Implement PDF parser in packages/backend/internal/parser/document/pdf.go (extract text from PDF)
 - [ ] T088 [P] [US1] Implement Markdown parser in packages/backend/internal/parser/document/markdown.go (parse structured markdown)
 - [ ] T089 [P] [US1] Implement image metadata extractor in packages/backend/internal/parser/media/image.go (EXIF data, thumbnail generation)
@@ -264,16 +264,16 @@ Based on plan.md structure:
 
 #### Standard Mode (TF-IDF - Offline)
 
-- [ ] T130 [P] [US3] Implement TF-IDF calculator in packages/backend/internal/analysis/tfidf/calculator.go (term frequency, inverse document frequency)
+- [X] T130 [P] [US3] Implement TF-IDF calculator in packages/backend/internal/analysis/tfidf/calculator.go (term frequency, inverse document frequency)
 - [ ] T131 [P] [US3] Implement TextRank keyword extraction in packages/backend/internal/analysis/textrank/extractor.go (graph-based ranking)
 - [ ] T132 [US3] Create AnalysisService orchestration in packages/backend/internal/services/analysis_service.go (TF-IDF mode by default)
 
 #### AI Mode (Optional - Online)
 
-- [ ] T133 [P] [US3] Implement OpenAI client in packages/backend/internal/analysis/ai/openai.go (summary generation)
-- [ ] T134 [P] [US3] Implement Claude client in packages/backend/internal/analysis/ai/claude.go (summary generation)
-- [ ] T135 [P] [US3] Implement Ollama client in packages/backend/internal/analysis/ai/ollama.go (local LLM support)
-- [ ] T136 [US3] Implement graceful degradation in packages/backend/internal/services/analysis_service.go (fallback to TF-IDF on AI failure, non-blocking notification per FR-056)
+- [X] T133 [P] [US3] Implement OpenAI client in packages/backend/internal/analysis/ai/openai.go (summary generation)
+- [X] T134 [P] [US3] Implement Claude client in packages/backend/internal/analysis/ai/claude.go (summary generation)
+- [X] T135 [P] [US3] Implement Ollama client in packages/backend/internal/analysis/ai/ollama.go (local LLM support)
+- [X] T136 [US3] Implement graceful degradation in packages/backend/internal/services/analysis_service.go (fallback to TF-IDF on AI failure, non-blocking notification per FR-056)
 
 #### API Layer (Desktop REST)
 
@@ -319,16 +319,16 @@ Based on plan.md structure:
 
 #### S3-Compatible Storage (Go Core)
 
-- [ ] T151 [P] [US4] Implement S3 client interface in packages/backend/internal/sync/s3/client.go (Upload, Download, Delete, List methods)
+- [X] T151 [P] [US4] Implement S3 client interface in packages/backend/internal/sync/s3/client.go (Upload, Download, Delete, List methods)
 - [ ] T152 [P] [US4] Implement AWS S3 provider in packages/backend/internal/sync/s3/aws.go
 - [ ] T153 [P] [US4] Implement Cloudflare R2 provider in packages/backend/internal/sync/s3/r2.go
 - [ ] T154 [P] [US4] Implement MinIO provider in packages/backend/internal/sync/s3/minio.go (self-hosted S3-compatible)
 
 #### Sync Engine (Go Core)
 
-- [ ] T155 [US4] Implement incremental sync logic in packages/backend/internal/sync/engine/sync.go (change_log-based incremental uploads)
-- [ ] T156 [US4] Implement conflict resolver in packages/backend/internal/sync/conflict/resolver.go (last write wins per updated_at, conflict logging)
-- [ ] T157 [US4] Implement sync queue manager in packages/backend/internal/sync/queue/queue.go (offline queuing, exponential backoff, retry logic)
+- [X] T155 [US4] Implement incremental sync logic in packages/backend/internal/sync/engine/sync.go (change_log-based incremental uploads)
+- [X] T156 [US4] Implement conflict resolver in packages/backend/internal/sync/conflict/resolver.go (last write wins per updated_at, conflict logging)
+- [X] T157 [US4] Implement sync queue manager in packages/backend/internal/sync/queue/queue.go (offline queuing, exponential backoff, retry logic)
 - [ ] T158 [US4] Implement SHA-256 content addressing for media files in packages/backend/internal/sync/storage/content_addressed.go (deduplication)
 
 #### API Layer (Desktop REST)
@@ -383,16 +383,16 @@ Based on plan.md structure:
 
 #### Export Engine (Go Core)
 
-- [ ] T179 [P] [US5] Implement AES-256 encryption in packages/backend/internal/export/crypto/encrypt.go (password-based, AES-256-GCM)
-- [ ] T180 [P] [US5] Implement archive compression in packages/backend/internal/export/compression/compress.go (tar.gz format, database + media files)
-- [ ] T181 [P] [US5] Implement checksum generator in packages/backend/internal/export/checksum/checksum.go (SHA-256 of archive)
-- [ ] T182 [US5] Create ExportService orchestration in packages/backend/internal/services/export_service.go (coordinate encryption, compression, checksum)
+- [X] T179 [P] [US5] Implement AES-256 encryption in packages/backend/internal/export/crypto/encrypt.go (password-based, AES-256-GCM)
+- [X] T180 [P] [US5] Implement archive compression in packages/backend/internal/export/compression/compress.go (tar.gz format, database + media files)
+- [X] T181 [P] [US5] Implement checksum generator in packages/backend/internal/export/checksum/checksum.go (SHA-256 of archive)
+- [X] T182 [US5] Create ExportService orchestration in packages/backend/internal/services/export_service.go (coordinate encryption, compression, checksum)
 
 #### Import Engine (Go Core)
 
-- [ ] T183 [US5] Implement archive decryption in packages/backend/internal/export/crypto/decrypt.go (password validation, AES-256-GCM decryption)
-- [ ] T184 [US5] Implement archive extraction in packages/backend/internal/export/compression/decompress.go (tar.gz extraction, validation)
-- [ ] T185 [US5] Implement data restoration in packages/backend/internal/export/restore.go (database import, media file restoration, conflict handling)
+- [X] T183 [US5] Implement archive decryption in packages/backend/internal/export/crypto/decrypt.go (password validation, AES-256-GCM decryption)
+- [X] T184 [US5] Implement archive extraction in packages/backend/internal/export/compression/decompress.go (tar.gz extraction, validation)
+- [X] T185 [US5] Implement data restoration in packages/backend/internal/export/restore.go (database import, media file restoration, conflict handling)
 
 #### API Layer (Desktop REST)
 

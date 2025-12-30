@@ -155,12 +155,10 @@ func (h *TagHandler) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		tag.Color = *request.Color
 	}
 
-	// TODO: Implement UpdateTag in repository
-	// For now, return success without updating
-	// if err := h.repo.UpdateTag(tag); err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
+	if err := h.repo.UpdateTag(tag); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tag)
@@ -178,16 +176,14 @@ func (h *TagHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
 		id = r.URL.Path[len("/tags/"):]
 	}
 
-	// TODO: Implement DeleteTag in repository
-	// For now, return success without deleting
-	// if err := h.repo.DeleteTag(id); err != nil {
-	// 	if err == sql.ErrNoRows {
-	// 		http.Error(w, "Tag not found", http.StatusNotFound)
-	// 		return
-	// 	}
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
+	if err := h.repo.DeleteTag(id); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Tag not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
