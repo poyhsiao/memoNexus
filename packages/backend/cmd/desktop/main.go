@@ -7,18 +7,65 @@ import (
 	"net/http"
 	"os"
 
-	_ "modernc.org/sqlite"
+	"github.com/kimhsiao/memonexus/backend/internal/db"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
+	"github.com/kimhsiao/memonexus/backend/cmd/desktop/handlers"
 )
 
 func main() {
-	// TODO: Integrate PocketBase embedded server
-	// For now, provide a simple health check
+	// Initialize logger
+	logging.Init(os.Stdout, logging.LevelInfo)
+	logging.Info("MemoNexus Desktop Server starting...")
 
-	port := "8090"
-	log.Printf("MemoNexus Desktop Server starting on port %s...", port)
+	// Get data directory from environment or use default
+	dataDir := os.Getenv("DB_PATH")
+	if dataDir == "" {
+		dataDir = "./data"
+	}
 
-	// Simple health check endpoint
-	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+	// Ensure data directory exists
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
+	}
+
+	// Open database
+	database, err := db.Open(dataDir)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer database.Close()
+
+	logging.Info("Database opened", map[string]interface{}{"path": dataDir})
+
+	// Run migrations
+	migrator := db.NewMigrator(database.DB, "./internal/db/migrations")
+	if err := migrator.Initialize(); err != nil {
+		log.Fatalf("Failed to initialize migrator: %v", err)
+	}
+
+	if err := migrator.Up(); err != nil {
+		log.Fatalf("Failed to apply migrations: %v", err)
+	}
+
+	currentVersion, _ := migrator.CurrentVersion()
+	logging.Info("Migrations applied", map[string]interface{}{"version": currentVersion})
+
+	// Create repository
+	repository := db.NewRepository(database.DB)
+
+	// Create handlers
+	contentHandler := handlers.NewContentHandler(repository)
+	tagHandler := handlers.NewTagHandler(repository)
+	searchHandler := handlers.NewSearchHandler(database.DB)
+
+	// Create WebSocket hub
+	wsHub := NewWSHub()
+
+	// Setup routes
+	mux := http.NewServeMux()
+
+	// Health check
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -28,16 +75,74 @@ func main() {
 		w.Write([]byte(`{"status":"ok","service":"memonexus-desktop"}`))
 	})
 
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
+	// Content routes
+	mux.HandleFunc("/api/content", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			contentHandler.ListContentItems(w, r)
+		case http.MethodPost:
+			contentHandler.CreateContentItem(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
-func init() {
-	// Ensure data directory exists
-	dataDir := os.Getenv("DB_PATH")
-	if dataDir == "" {
-		dataDir = "./data"
+	mux.HandleFunc("/api/content/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			contentHandler.GetContentItem(w, r)
+		case http.MethodPut:
+			contentHandler.UpdateContentItem(w, r)
+		case http.MethodDelete:
+			contentHandler.DeleteContentItem(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Tag routes
+	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			tagHandler.ListTags(w, r)
+		case http.MethodPost:
+			tagHandler.CreateTag(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/tags/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			tagHandler.GetTag(w, r)
+		case http.MethodPut:
+			tagHandler.UpdateTag(w, r)
+		case http.MethodDelete:
+			tagHandler.DeleteTag(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Search route
+	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
+		searchHandler.Search(w, r)
+	})
+
+	// WebSocket route
+	mux.HandleFunc("/api/realtime", HandleWebSocket(wsHub))
+
+	// Start server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8090"
 	}
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
+
+	logging.Info("Server listening", map[string]interface{}{"port": port})
+	log.Printf("MemoNexus Desktop Server listening on :%s", port)
+
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatalf("Server failed: %v", err)
 	}
 }
