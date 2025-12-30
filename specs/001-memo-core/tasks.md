@@ -147,53 +147,53 @@ Based on plan.md structure:
 
 ### Unit Tests for User Story 1
 
-- [ ] T083 [P] [US1] Unit test for ContentItem repository CRUD operations in packages/backend/internal/db/repository_test.go
-- [ ] T084 [P] [US1] Unit test for Tag repository CRUD operations in packages/backend/internal/db/repository_test.go
-- [ ] T085 [P] [US1] Unit test for UUID generation and validation in packages/backend/internal/uuid/uuid_test.go
+- [X] T083 [P] [US1] Unit test for ContentItem repository CRUD operations in packages/backend/internal/db/repository_test.go
+- [X] T084 [P] [US1] Unit test for Tag repository CRUD operations in packages/backend/internal/db/repository_test.go
+- [X] T085 [P] [US1] Unit test for UUID generation and validation in packages/backend/internal/uuid/uuid_test.go
 
 ### Implementation for User Story 1
 
 #### Content Ingestion (Go Core - Parser Engine)
 
 - [X] T086 [P] [US1] Implement web scraper in packages/backend/internal/parser/web/scraper.go (fetch URL, extract clean text, metadata, OpenGraph)
-- [ ] T087 [P] [US1] Implement PDF parser in packages/backend/internal/parser/document/pdf.go (extract text from PDF)
-- [ ] T088 [P] [US1] Implement Markdown parser in packages/backend/internal/parser/document/markdown.go (parse structured markdown)
-- [ ] T089 [P] [US1] Implement image metadata extractor in packages/backend/internal/parser/media/image.go (EXIF data, thumbnail generation)
-- [ ] T090 [P] [US1] Implement video metadata extractor in packages/backend/internal/parser/media/video.go (duration, resolution, thumbnail)
-- [ ] T091 [P] [US1] Implement file storage manager in packages/backend/internal/parser/storage/storage.go (SHA-256 content addressing, local filesystem)
-- [ ] T092 [US1] Create ContentService orchestration layer in packages/backend/internal/services/content_service.go (coordinates parser, storage, database)
+- [X] T087 [P] [US1] Implement PDF parser in packages/backend/internal/parser/document/pdf.go (extract text from PDF)
+- [X] T088 [P] [US1] Implement Markdown parser in packages/backend/internal/parser/document/markdown.go (parse structured markdown)
+- [X] T089 [P] [US1] Implement image metadata extractor in packages/backend/internal/parser/media/image.go (EXIF data, thumbnail generation)
+- [X] T090 [P] [US1] Implement video metadata extractor in packages/backend/internal/parser/media/video.go (duration, resolution, thumbnail)
+- [X] T091 [P] [US1] Implement file storage manager in packages/backend/internal/parser/storage/storage.go (SHA-256 content addressing, local filesystem)
+- [X] T092 [US1] Create ContentService orchestration layer in packages/backend/internal/services/content_service.go (coordinates parser, storage, database)
 
 #### API Layer (Desktop REST)
 
-- [ ] T093 [US1] Implement POST /content endpoint in packages/backend/cmd/desktop/handlers/content.go (URL and file upload)
-- [ ] T094 [US1] Implement GET /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go
-- [ ] T095 [US1] Implement PUT /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go (title, tags update, version increment)
-- [ ] T096 [US1] Implement DELETE /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go (soft delete)
-- [ ] T097 [US1] Implement GET /content endpoint (list) in packages/backend/cmd/desktop/handlers/content.go (pagination, filters, sort)
+- [X] T093 [US1] Implement POST /content endpoint in packages/backend/cmd/desktop/handlers/content.go (URL and file upload)
+- [X] T094 [US1] Implement GET /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go
+- [X] T095 [US1] Implement PUT /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go (title, tags update, version increment)
+- [X] T096 [US1] Implement DELETE /content/{id} endpoint in packages/backend/cmd/desktop/handlers/content.go (soft delete)
+- [X] T097 [US1] Implement GET /content endpoint (list) in packages/backend/cmd/desktop/handlers/content.go (pagination, filters, sort)
 
 #### Tag Management (Go Core + API)
 
-- [ ] T098 [US1] Implement POST /tags endpoint in packages/backend/cmd/desktop/handlers/tags.go
-- [ ] T099 [US1] Implement PUT /tags/{id} endpoint in packages/backend/cmd/desktop/handlers/tags.go
-- [ ] T100 [US1] Implement DELETE /tags/{id} endpoint in packages/backend/cmd/desktop/handlers/tags.go
-- [ ] T101 [US1] Implement GET /tags endpoint in packages/backend/cmd/desktop/handlers/tags.go (list all)
+- [X] T098 [US1] Implement POST /tags endpoint in packages/backend/cmd/desktop/handlers/tags.go
+- [X] T099 [US1] Implement PUT /tags/{id} endpoint in packages/backend/cmd/desktop/handlers/tags.go
+- [X] T100 [US1] Implement DELETE /tags/{id} endpoint in packages/backend/cmd/desktop/handlers/tags.go
+- [X] T101 [US1] Implement GET /tags endpoint in packages/backend/cmd/desktop/handlers/tags.go (list all)
 
 #### Flutter UI (Content Capture)
 
-- [ ] T102 [P] [US1] Create content capture screen in apps/frontend/lib/screens/capture_screen.dart (URL input, file upload)
-- [ ] T103 [P] [US1] Create content list widget in apps/frontend/lib/widgets/content_list.dart (thumbnails, titles, tags, timestamps)
-- [ ] T104 [P] [US1] Create content detail view in apps/frontend/lib/screens/content_detail_screen.dart (full content, metadata, edit tags)
-- [ ] T105 [P] [US1] Create tag picker widget in apps/frontend/lib/widgets/tag_picker.dart (multi-select, tag creation)
-- [ ] T106 [P] [US1] Create file upload widget in apps/frontend/lib/widgets/file_upload.dart (drag-drop support)
-- [ ] T107 [US1] Create ContentList Riverpod provider in apps/frontend/lib/providers/content_provider.dart (state management)
-- [ ] T108 [US1] Create CaptureScreen Riverpod provider in apps/frontend/lib/providers/capture_provider.dart
+- [X] T102 [P] [US1] Create content capture screen in apps/frontend/lib/screens/capture_screen.dart (URL input, file upload)
+- [X] T103 [P] [US1] Create content list widget in apps/frontend/lib/widgets/content_list.dart (thumbnails, titles, tags, timestamps)
+- [X] T104 [P] [US1] Create content detail view in apps/frontend/lib/screens/content_detail_screen.dart (full content, metadata, edit tags)
+- [X] T105 [P] [US1] Create tag picker widget in apps/frontend/lib/widgets/tag_picker.dart (multi-select, tag creation)
+- [X] T106 [P] [US1] Create file upload widget in apps/frontend/lib/widgets/file_upload.dart (drag-drop support)
+- [X] T107 [US1] Create ContentList Riverpod provider in apps/frontend/lib/providers/content_provider.dart (state management)
+- [X] T108 [US1] Create CaptureScreen Riverpod provider in apps/frontend/lib/providers/capture_provider.dart
 
 #### Integration & Error Handling
 
-- [ ] T109 [US1] Add error handling for unreachable URLs in packages/backend/internal/parser/web/scraper.go (timeout, 4xx/5xx errors)
-- [ ] T110 [US1] Add error handling for corrupted files in packages/backend/internal/parser/storage/storage.go
-- [ ] T111 [US1] Add duplicate content detection in packages/backend/internal/services/content_service.go (SHA-256 hash comparison)
-- [ ] T112 [US1] Add logging for content ingestion operations in packages/backend/internal/services/content_service.go (FR-048, FR-049)
+- [X] T109 [US1] Add error handling for unreachable URLs in packages/backend/internal/parser/parser.go (timeout, 4xx/5xx errors)
+- [X] T110 [US1] Add error handling for corrupted files in packages/backend/internal/parser/storage/storage.go
+- [X] T111 [US1] Add duplicate content detection in packages/backend/internal/services/content_service.go (SHA-256 hash comparison)
+- [X] T112 [US1] Add logging for content ingestion operations in packages/backend/internal/services/content_service.go (FR-048, FR-049)
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently. Users can capture content from URLs/files, view organized list with thumbnails, and manage tags.
 
