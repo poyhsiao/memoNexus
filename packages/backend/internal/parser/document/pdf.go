@@ -9,6 +9,8 @@ import (
 
 	"github.com/unidoc/unipdf/v3/extractor"
 	"github.com/unidoc/unipdf/v3/model"
+
+	"github.com/kimhsiao/memonexus/backend/internal/parser"
 )
 
 // PDFExtractor implements Extractor for PDF files.
@@ -32,7 +34,7 @@ func NewPDFExtractorWithMaxPages(maxPages int) *PDFExtractor {
 }
 
 // Extract extracts text content from a PDF file.
-func (e *PDFExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, error) {
+func (e *PDFExtractor) Extract(r io.Reader, sourceURL string) (*parser.ParseResult, error) {
 	// Read PDF data
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -79,94 +81,44 @@ func (e *PDFExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, err
 	}
 
 	// Extract metadata
-	title, _ := pdfReader.GetPdfMetaData()
+	_, _ = pdfReader.GetCatalogMetadata()
 
 	// Build result
 	contentText := strings.TrimSpace(contentBuilder.String())
 
-	return &ParseResult{
+	// Try to get title from metadata - use PdfInfo if available
+	var title string
+	pdfInfo, err := pdfReader.GetPdfInfo()
+	if err == nil && pdfInfo != nil && pdfInfo.Title != nil {
+		title = pdfInfo.Title.Str()
+	}
+
+	return &parser.ParseResult{
 		Title:       e.extractTitle(title, sourceURL),
 		ContentText: contentText,
-		MediaType:   MediaTypePDF,
-		WordCount:   countWords(contentText),
-		Language:    detectLanguage(contentText),
+		MediaType:   parser.MediaTypePDF,
+		WordCount:   parser.CountWords(contentText),
+		Language:    parser.DetectLanguage(contentText),
 		SourceURL:   sourceURL,
 	}, nil
 }
 
 // SupportedMediaTypes returns the media types this extractor handles.
-func (e *PDFExtractor) SupportedMediaTypes() []MediaType {
-	return []MediaType{MediaTypePDF}
+func (e *PDFExtractor) SupportedMediaTypes() []parser.MediaType {
+	return []parser.MediaType{parser.MediaTypePDF}
 }
 
 // extractTitle extracts title from PDF metadata or source URL.
-func (e *PDFExtractor) extractTitle(meta *model.PdfPdfMetaData, sourceURL string) string {
+func (e *PDFExtractor) extractTitle(metaTitle string, sourceURL string) string {
 	// Try PDF metadata title
-	if title := meta.Title; title != "" {
-		return truncate(title, 500)
+	if metaTitle != "" {
+		return parser.Truncate(metaTitle, 500)
 	}
 
 	// Fallback to filename from URL
 	if sourceURL != "" {
-		return basenameFromURL(sourceURL)
+		return parser.BasenameFromURLFull(sourceURL)
 	}
 
 	return "Untitled PDF"
-}
-
-// countWords counts words in text.
-func countWords(s string) int {
-	words := strings.Fields(s)
-	return len(words)
-}
-
-// detectLanguage detects the language of text (heuristic).
-func detectLanguage(s string) string {
-	// Simple heuristic: check for non-ASCII characters
-	hasNonASCII := false
-	for _, r := range s {
-		if r > 127 {
-			hasNonASCII = true
-			break
-		}
-	}
-
-	if hasNonASCII {
-		// Could add more sophisticated detection
-		return "unknown"
-	}
-
-	return "en"
-}
-
-// truncate truncates string to max length.
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-
-	// Try to truncate at word boundary
-	if i := strings.LastIndex(s[:maxLen], " "); i > 0 {
-		return s[:i] + "..."
-	}
-
-	return s[:maxLen] + "..."
-}
-
-// basenameFromURL extracts a basename from URL for default title.
-func basenameFromURL(sourceURL string) string {
-	u := sourceURL
-	if i := strings.Index(u, "?"); i > 0 {
-		u = u[:i]
-	}
-
-	// Get last path segment
-	if i := strings.LastIndex(u, "/"); i >= 0 {
-		base := u[i+1:]
-		if base != "" {
-			return base
-		}
-	}
-
-	return "Untitled"
 }

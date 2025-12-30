@@ -1,4 +1,7 @@
 // Package media provides video metadata extraction.
+//go:build !novidcodec
+// +build !novidcodec
+
 package media
 
 import (

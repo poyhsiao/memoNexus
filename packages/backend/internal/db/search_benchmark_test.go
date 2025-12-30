@@ -13,8 +13,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// setupTestDB creates an in-memory database for benchmarking
-func setupTestDB(b *testing.B) *sql.DB {
+// setupBenchmarkDB creates an in-memory database for benchmarking
+func setupBenchmarkDB(b *testing.B) *sql.DB {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		b.Fatalf("Failed to open database: %v", err)
@@ -94,8 +94,8 @@ func setupTestDB(b *testing.B) *sql.DB {
 // generateUUID creates a random UUID string
 func generateUUID() string {
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		rand.Uint32(), rand.Uint16()&0x0fff, rand.Uint16()&0x0fff,
-		rand.Uint16()&0x0fff, rand.Uint64()&0xffffffffffff)
+		rand.Uint32(), uint16(rand.Uint32())&0x0fff, uint16(rand.Uint32())&0x0fff,
+		uint16(rand.Uint32())&0x0fff, rand.Uint64()&0xffffffffffff)
 }
 
 // populateContentItems inserts n test content items
@@ -142,7 +142,7 @@ func populateContentItems(db *sql.DB, n int) error {
 // BenchmarkSearch10000Items benchmarks search performance with 10,000 items
 // Constitution requirement SC-002: <100ms for 10,000 items
 func BenchmarkSearch10000Items(b *testing.B) {
-	db := setupTestDB(b)
+	db := setupBenchmarkDB(b)
 	defer db.Close()
 
 	// Populate with 10,000 items
@@ -225,7 +225,7 @@ func BenchmarkSearch100000Items(b *testing.B) {
 		b.Skip("Skipping large benchmark in short mode")
 	}
 
-	db := setupTestDB(b)
+	db := setupBenchmarkDB(b)
 	defer db.Close()
 
 	// Populate with 100,000 items

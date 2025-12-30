@@ -8,10 +8,11 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"strings"
 
 	"github.com/disintegration/imaging"
 	_ "golang.org/x/image/webp"
+
+	"github.com/kimhsiao/memonexus/backend/internal/parser"
 )
 
 // ImageExtractor implements Extractor for image files.
@@ -43,7 +44,7 @@ func NewImageExtractorWithThumbnails(width, height int) *ImageExtractor {
 }
 
 // Extract extracts metadata from an image file.
-func (e *ImageExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, error) {
+func (e *ImageExtractor) Extract(r io.Reader, sourceURL string) (*parser.ParseResult, error) {
 	// Decode image
 	img, format, err := image.Decode(r)
 	if err != nil {
@@ -53,10 +54,10 @@ func (e *ImageExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, e
 	bounds := img.Bounds()
 
 	// Extract basic metadata
-	result := &ParseResult{
+	result := &parser.ParseResult{
 		Title:       e.extractTitle(sourceURL),
 		ContentText: fmt.Sprintf("%s image (%dx%d)", format, bounds.Dx(), bounds.Dy()),
-		MediaType:   MediaTypeImage,
+		MediaType:   parser.MediaTypeImage,
 		WordCount:   0, // Images have no word count
 		Language:    "", // Images don't have language
 		SourceURL:   sourceURL,
@@ -67,9 +68,8 @@ func (e *ImageExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, e
 
 	// Generate thumbnail if requested
 	if e.generateThumbnail {
-		// Convert to imaging.Image for thumbnail generation
-		srcImg := imaging.FromImage(img, bounds)
-		thumbnail := imaging.Thumbnail(srcImg, e.thumbnailWidth, e.thumbnailHeight, imaging.Lanczos)
+		// Use imaging.Resize to generate thumbnail directly from image.Image
+		thumbnail := imaging.Resize(img, e.thumbnailWidth, e.thumbnailHeight, imaging.Lanczos)
 
 		// In a real implementation, we would save the thumbnail
 		// For now, we just note that thumbnail generation happened
@@ -80,8 +80,8 @@ func (e *ImageExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, e
 }
 
 // SupportedMediaTypes returns the media types this extractor handles.
-func (e *ImageExtractor) SupportedMediaTypes() []MediaType {
-	return []MediaType{MediaTypeImage}
+func (e *ImageExtractor) SupportedMediaTypes() []parser.MediaType {
+	return []parser.MediaType{parser.MediaTypeImage}
 }
 
 // extractTitle extracts title from source URL.
@@ -91,28 +91,7 @@ func (e *ImageExtractor) extractTitle(sourceURL string) string {
 	}
 
 	// Get filename from URL
-	return basenameFromURL(sourceURL)
-}
-
-// basenameFromURL extracts a basename from URL for default title.
-func basenameFromURL(sourceURL string) string {
-	u := sourceURL
-	if i := strings.Index(u, "?"); i > 0 {
-		u = u[:i]
-	}
-	if i := strings.Index(u, "#"); i > 0 {
-		u = u[:i]
-	}
-
-	// Get last path segment
-	if i := strings.LastIndex(u, "/"); i >= 0 {
-		base := u[i+1:]
-		if base != "" {
-			return base
-		}
-	}
-
-	return "Untitled"
+	return parser.BasenameFromURLFull(sourceURL)
 }
 
 // ImageMetadata represents extracted image metadata.
