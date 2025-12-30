@@ -211,34 +211,34 @@ Based on plan.md structure:
 
 ### Unit Tests for User Story 2
 
-- [ ] T113 [P] [US2] Unit test for FTS5 query execution in packages/backend/internal/db/search_test.go (BM25 ranking, Unicode handling)
-- [ ] T114 [P] [US2] Unit test for search filters (media type, date range, tags) in packages/backend/internal/db/search_test.go
+- [X] T113 [P] [US2] Unit test for FTS5 query execution in packages/backend/internal/db/search_test.go (BM25 ranking, Unicode handling)
+- [X] T114 [P] [US2] Unit test for search filters (media type, date range, tags) in packages/backend/internal/db/search_test.go
 
 ### Implementation for User Story 2
 
 #### Search Engine (Go Core - FTS5)
 
-- [ ] T115 [US2] Implement FTS5 search service in packages/backend/internal/db/search.go (BM25 ranking, Unicode support, <100ms response)
-- [ ] T116 [US2] Implement search filter builder in packages/backend/internal/db/filters.go (media type, date range, tag filters)
-- [ ] T117 [US2] Implement search term highlighting in packages/backend/internal/db/highlighting.go (extract matched terms from FTS5 results)
+- [X] T115 [US2] Implement FTS5 search service in packages/backend/internal/db/search.go (BM25 ranking, Unicode support, <100ms response)
+- [X] T116 [US2] Implement search filter builder in packages/backend/internal/db/filters.go (media type, date range, tag filters)
+- [X] T117 [US2] Implement search term highlighting in packages/backend/internal/db/highlighting.go (extract matched terms from FTS5 results)
 
 #### API Layer (Desktop REST)
 
-- [ ] T118 [US2] Implement GET /search endpoint in packages/backend/cmd/desktop/handlers/search.go (FTS5 query with filters, pagination)
-- [ ] T119 [US2] Add query validation (max length, special characters) in packages/backend/cmd/desktop/handlers/search.go
+- [X] T118 [US2] Implement GET /search endpoint in packages/backend/cmd/desktop/handlers/search.go (FTS5 query with filters, pagination)
+- [X] T119 [US2] Add query validation (max length, special characters) in packages/backend/cmd/desktop/handlers/search.go
 
 #### Flutter UI (Search)
 
-- [ ] T120 [P] [US2] Create search screen in apps/frontend/lib/screens/search_screen.dart (search input, filters, results list)
-- [ ] T121 [P] [US2] Create search result item widget in apps/frontend/lib/widgets/search_result_item.dart (relevance score, highlighted terms)
-- [ ] T122 [P] [US2] Create search filter widget in apps/frontend/lib/widgets/search_filters.dart (media type, date range, tags)
-- [ ] T123 [US2] Create SearchResults Riverpod provider in apps/frontend/lib/providers/search_provider.dart (debounced queries, filter state)
-- [ ] T124 [US2] Add search result navigation to content detail screen in apps/frontend/lib/screens/search_screen.dart
+- [X] T120 [P] [US2] Create search screen in apps/frontend/lib/screens/search_screen.dart (search input, filters, results list)
+- [X] T121 [P] [US2] Create search result item widget in apps/frontend/lib/widgets/search_result_item.dart (relevance score, highlighted terms)
+- [X] T122 [P] [US2] Create search filter widget in apps/frontend/lib/widgets/search_filters.dart (media type, date range, tags)
+- [X] T123 [US2] Create SearchResults Riverpod provider in apps/frontend/lib/providers/search_provider.dart (debounced queries, filter state)
+- [X] T124 [US2] Add search result navigation to content detail screen in apps/frontend/lib/screens/search_screen.dart
 
 #### Performance Optimization
 
-- [ ] T125 [US2] Enable WAL mode for concurrent read/write in packages/backend/internal/db/db.go (PRAGMA journal_mode=WAL)
-- [ ] T126 [US2] Add database indexes for list views in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (created_at DESC, media_type)
+- [X] T125 [US2] Enable WAL mode for concurrent read/write in packages/backend/internal/db/db.go (PRAGMA journal_mode=WAL)
+- [X] T126 [US2] Add database indexes for list views in packages/backend/internal/db/migrations/V1__initial_schema.up.sql (created_at DESC, media_type)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Users can capture content and instantly search it offline with sub-100ms response times.
 
@@ -265,8 +265,8 @@ Based on plan.md structure:
 #### Standard Mode (TF-IDF - Offline)
 
 - [X] T130 [P] [US3] Implement TF-IDF calculator in packages/backend/internal/analysis/tfidf/calculator.go (term frequency, inverse document frequency)
-- [ ] T131 [P] [US3] Implement TextRank keyword extraction in packages/backend/internal/analysis/textrank/extractor.go (graph-based ranking)
-- [ ] T132 [US3] Create AnalysisService orchestration in packages/backend/internal/services/analysis_service.go (TF-IDF mode by default)
+- [X] T131 [P] [US3] Implement TextRank keyword extraction in packages/backend/internal/analysis/textrank/extractor.go (graph-based ranking)
+- [X] T132 [US3] Create AnalysisService orchestration in packages/backend/internal/services/analysis_service.go (TF-IDF mode by default)
 
 #### AI Mode (Optional - Online)
 
@@ -277,10 +277,10 @@ Based on plan.md structure:
 
 #### API Layer (Desktop REST)
 
-- [ ] T137 [US3] Implement GET /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (get config, API key redacted)
-- [ ] T138 [US3] Implement POST /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (set encrypted credentials)
-- [ ] T139 [US3] Implement DELETE /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (disable AI mode)
-- [ ] T140 [US3] Implement POST /content/{id}/summary endpoint in packages/backend/cmd/desktop/handlers/content.go (generate summary)
+- [X] T137 [US3] Implement GET /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (get config, API key redacted)
+- [X] T138 [US3] Implement POST /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (set encrypted credentials)
+- [X] T139 [US3] Implement DELETE /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (disable AI mode)
+- [X] T140 [US3] Implement POST /content/{id}/summary endpoint in packages/backend/cmd/desktop/handlers/ai.go (generate summary)
 
 #### Flutter UI (Analysis)
 
