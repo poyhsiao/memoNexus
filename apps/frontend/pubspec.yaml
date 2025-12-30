@@ -26,6 +26,7 @@ dependencies:
   # Local Storage (mobile)
   sqflite: ^2.3.3+2
   path_provider: ^2.1.4
+  path: ^1.9.0
 
   # FFI (mobile)
   ffi: ^2.1.3
