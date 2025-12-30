@@ -3,6 +3,7 @@ package models
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"time"
 )
 
@@ -15,12 +16,28 @@ func (u UUID) Value() (driver.Value, error) {
 }
 
 // Scan implements sql.Scanner for UUID.
+// Handles both []byte and string types from SQLite.
 func (u *UUID) Scan(value interface{}) error {
 	if value == nil {
 		*u = ""
 		return nil
 	}
-	*u = UUID(value.([]byte))
+
+	// Handle both []byte and string types from SQLite
+	switch v := value.(type) {
+	case []byte:
+		*u = UUID(v)
+	case string:
+		*u = UUID(v)
+	default:
+		return fmt.Errorf("cannot scan %T into UUID", value)
+	}
+
+	// Validate UUID format (should be 36 chars for non-empty)
+	if *u != "" && len(*u) != 36 {
+		return fmt.Errorf("invalid UUID format: length %d", len(*u))
+	}
+
 	return nil
 }
 

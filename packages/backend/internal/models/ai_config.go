@@ -9,7 +9,7 @@ type AIConfig struct {
 	ID              UUID   `db:"id" json:"id"`
 	Provider        string `db:"provider" json:"provider"` // openai, claude, ollama
 	APIEndpoint     string `db:"api_endpoint" json:"api_endpoint"`
-	APIKeyEncrypted string `db:"api_key_encrypted json:"-"` // Never expose
+	APIKeyEncrypted string `db:"api_key_encrypted" json:"-"` // Never expose
 	ModelName       string `db:"model_name" json:"model_name"`
 	MaxTokens       int    `db:"max_tokens" json:"max_tokens"`
 	IsEnabled       bool   `db:"is_enabled" json:"is_enabled"`

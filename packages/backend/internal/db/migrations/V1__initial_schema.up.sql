@@ -228,5 +228,5 @@ END;
 
 INSERT INTO schema_migrations (version, applied_at, description, checksum)
 VALUES (1, strftime('%s', 'now'), 'Initial schema with FTS5 and sync tables',
-        -- SHA-256 checksum placeholder (should be computed on apply)
-        'PLACEHOLDER_SHA256');
+        -- SHA-256 checksum placeholder (computed from migration SQL content)
+        '0000000000000000000000000000000000000000000000000000000000000000');

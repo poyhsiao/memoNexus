@@ -97,7 +97,7 @@ class ContentItem {
       tags: tags ?? this.tags,
       summary: summary ?? this.summary,
       isDeleted: isDeleted ?? this.isDeleted,
-      createdAt: createdAt,
+      createdAt: this.createdAt, // createdAt is immutable
       updatedAt: updatedAt ?? this.updatedAt,
       version: version + 1,
       contentHash: contentHash ?? this.contentHash,
