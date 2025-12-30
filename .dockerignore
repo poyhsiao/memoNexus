@@ -1,0 +1,43 @@
+# MemoNexus .dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Build outputs
+build/
+dist/
+
+# Dependencies
+node_modules/
+.pub-cache/
+.dart_tool/
+
+# IDE
+.vscode/
+.idea/
+
+# Local data
+data/
+*.db
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+
+# Secrets
+*.key
+*.pem
+secrets/
+
+# Documentation
+specs/
+openspec/
+README.md
+CLAUDE.md
+AGENTS.md

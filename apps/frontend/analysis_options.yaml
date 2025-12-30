@@ -1,0 +1,24 @@
+# Flutter analysis options
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Core rules
+    - avoid_print
+    - avoid_unnecessary_containers
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_fields
+    - prefer_final_locals
+    - sort_child_properties_last
+    - use_key_in_widget_constructors
+
+analyzer:
+  exclude:
+    - '**/*.g.dart'
+    - '**/*.freezed.dart'
+  errors:
+    # Treat missing return as error
+    missing_return: error
+    # Treat dead code as warning
+    dead_code: warning

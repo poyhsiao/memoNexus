@@ -27,18 +27,18 @@ Based on plan.md structure:
 
 **Purpose**: Project initialization and monorepo structure
 
-- [ ] T001 Create monorepo structure: apps/, packages/, scripts/ directories
-- [ ] T002 Initialize Go workspace with go.work file at repository root
-- [ ] T003 [P] Initialize pnpm workspace with pnpm-workspace.yaml at repository root
-- [ ] T004 [P] Create Go module packages/backend with go.mod (Go 1.25.5, PocketBase v0.35.0, pure-Go SQLite)
-- [ ] T005 [P] Create Flutter project apps/frontend (Flutter 3.27.0, Riverpod, UUID package)
-- [ ] T006 [P] Create packages/shared TypeScript project for type definitions
-- [ ] T007 [P] Create unified build script scripts/build.sh for Go + Flutter coordination
-- [ ] T008 [P] Create unified test script scripts/test.sh with coverage reporting
-- [ ] T009 [P] Create development launcher scripts/dev.sh for local development
-- [ ] T011 [P] Create build-mobile-lib.sh script in scripts/build-mobile-lib.sh (Go Core → shared library for mobile FFI: go build -buildmode=c-shared for Android .so, iOS .framework)
+- [X] T001 Create monorepo structure: apps/, packages/, scripts/ directories
+- [X] T002 Initialize Go workspace with go.work file at repository root
+- [X] T003 [P] Initialize pnpm workspace with pnpm-workspace.yaml at repository root
+- [X] T004 [P] Create Go module packages/backend with go.mod (Go 1.25.5, PocketBase v0.35.0, pure-Go SQLite)
+- [X] T005 [P] Create Flutter project apps/frontend (Flutter 3.27.0, Riverpod, UUID package)
+- [X] T006 [P] Create packages/shared TypeScript project for type definitions
+- [X] T007 [P] Create unified build script scripts/build.sh for Go + Flutter coordination
+- [X] T008 [P] Create unified test script scripts/test.sh with coverage reporting
+- [X] T009 [P] Create development launcher scripts/dev.sh for local development
+- [X] T010 [P] Create build-mobile-lib.sh script in scripts/build-mobile-lib.sh (Go Core → shared library for mobile FFI: go build -buildmode=c-shared for Android .so, iOS .framework)
 
-**Checkpoint**: Monorepo structure ready, all package managers initialized, mobile build script ready
+**Checkpoint**: ✅ Monorepo structure ready, all package managers initialized, mobile build script ready
 
 ---
 

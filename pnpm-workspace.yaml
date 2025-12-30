@@ -1,0 +1,6 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Note: Go and Flutter have their own package management
+# pnpm workspace manages desktop build scripts and shared tooling

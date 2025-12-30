@@ -1,0 +1,81 @@
+# MemoNexus .gitignore
+
+# Build outputs
+build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.framework
+
+# Go
+*.test
+*.out
+go.work.sum
+# Don't ignore go.sum in modules
+!*/go.sum
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.metadata
+android/app/src/main/assets/data/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/.last_build_id
+ios/.generated/
+ios/Flutter/ephemeral/
+
+# Node.js / pnpm
+node_modules/
+.pnpm-store/
+*.log
+*.tsbuildinfo
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Encryption keys (never commit)
+*.key
+*.pem
+*.crt
+secrets/
+
+# Export archives (may contain sensitive data)
+*.encrypted
+exports/
