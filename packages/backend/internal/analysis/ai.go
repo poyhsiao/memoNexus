@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+// Note: CJK detection functions are now in the textrank package.
+// Import "github.com/kimhsiao/memonexus/backend/internal/analysis/textrank"
+// and use textrank.HasCJKText() and textrank.IsCJKCharacter().
+
+// Note: NewTFIDFAnalyzer is in tfidf.go of this package.
+
 // AIProvider represents supported AI providers.
 type AIProvider string
 

@@ -306,3 +306,73 @@ func (r *Repository) CreateSyncQueue(entry *models.SyncQueue) error {
 		entry.MaxRetries, entry.NextRetryAt, entry.Status, entry.CreatedAt, entry.UpdatedAt)
 	return err
 }
+
+// =====================================================
+// AIConfig Operations
+// =====================================================
+
+// GetAIConfig retrieves the current AI configuration (only one active config allowed).
+func (r *Repository) GetAIConfig() (*models.AIConfig, error) {
+	query := `
+	SELECT id, provider, api_endpoint, api_key_encrypted, model_name, max_tokens, is_enabled, created_at, updated_at
+	FROM ai_config
+	WHERE is_enabled = 1
+	ORDER BY updated_at DESC
+	LIMIT 1
+	`
+	var config models.AIConfig
+	err := r.db.QueryRow(query).Scan(
+		&config.ID, &config.Provider, &config.APIEndpoint, &config.APIKeyEncrypted,
+		&config.ModelName, &config.MaxTokens, &config.IsEnabled, &config.CreatedAt, &config.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+// SaveAIConfig saves or updates AI configuration.
+// If ID is empty, creates new config; otherwise updates existing.
+func (r *Repository) SaveAIConfig(config *models.AIConfig) error {
+	now := time.Now().Unix()
+
+	if config.ID == "" {
+		// Create new
+		config.ID = models.UUID(uuid.New())
+		config.CreatedAt = now
+		config.UpdatedAt = now
+
+		query := `
+		INSERT INTO ai_config (id, provider, api_endpoint, api_key_encrypted, model_name, max_tokens, is_enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+		_, err := r.db.Exec(query, config.ID, config.Provider, config.APIEndpoint, config.APIKeyEncrypted,
+			config.ModelName, config.MaxTokens, config.IsEnabled, config.CreatedAt, config.UpdatedAt)
+		return err
+	}
+
+	// Update existing
+	config.UpdatedAt = now
+	query := `
+	UPDATE ai_config
+	SET provider = ?, api_endpoint = ?, api_key_encrypted = ?, model_name = ?, max_tokens = ?, is_enabled = ?, updated_at = ?
+	WHERE id = ?
+	`
+	_, err := r.db.Exec(query, config.Provider, config.APIEndpoint, config.APIKeyEncrypted,
+		config.ModelName, config.MaxTokens, config.IsEnabled, config.UpdatedAt, config.ID)
+	return err
+}
+
+// DeleteAIConfig deletes (disables) the AI configuration with the given ID.
+func (r *Repository) DeleteAIConfig(id string) error {
+	query := `DELETE FROM ai_config WHERE id = ?`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+// DisableAllAIConfig disables all AI configurations (used when setting a new one).
+func (r *Repository) DisableAllAIConfig() error {
+	query := `UPDATE ai_config SET is_enabled = 0 WHERE is_enabled = 1`
+	_, err := r.db.Exec(query)
+	return err
+}

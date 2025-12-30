@@ -9,6 +9,7 @@ import (
 
 	"github.com/kimhsiao/memonexus/backend/internal/db"
 	"github.com/kimhsiao/memonexus/backend/internal/logging"
+	"github.com/kimhsiao/memonexus/backend/internal/services"
 	"github.com/kimhsiao/memonexus/backend/cmd/desktop/handlers"
 )
 
@@ -53,10 +54,14 @@ func main() {
 	// Create repository
 	repository := db.NewRepository(database.DB)
 
+	// Create analysis service
+	analysisService := services.NewAnalysisService(services.DefaultAnalysisConfig())
+
 	// Create handlers
 	contentHandler := handlers.NewContentHandler(repository)
 	tagHandler := handlers.NewTagHandler(repository)
 	searchHandler := handlers.NewSearchHandler(repository)
+	aiHandler := handlers.NewAIHandler(repository, analysisService, os.Getenv("MACHINE_ID"))
 
 	// Create WebSocket hub
 	wsHub := NewWSHub()
@@ -128,6 +133,38 @@ func main() {
 	// Search route
 	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
 		searchHandler.Search(w, r)
+	})
+
+	// AI configuration routes (T137-T139)
+	mux.HandleFunc("/api/ai/config", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			aiHandler.GetAIConfig(w, r)
+		case http.MethodPost:
+			aiHandler.SetAIConfig(w, r)
+		case http.MethodDelete:
+			aiHandler.DeleteAIConfig(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Content analysis routes (T140)
+	mux.HandleFunc("/api/content/analyze", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			// Determine operation from query parameter
+			operation := r.URL.Query().Get("operation")
+			switch operation {
+			case "summary":
+				aiHandler.GenerateSummary(w, r)
+			case "keywords":
+				aiHandler.ExtractKeywords(w, r)
+			default:
+				http.Error(w, "Invalid operation: use 'summary' or 'keywords'", http.StatusBadRequest)
+			}
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 
 	// WebSocket route

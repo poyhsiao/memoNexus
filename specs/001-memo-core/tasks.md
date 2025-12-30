@@ -265,8 +265,8 @@ Based on plan.md structure:
 #### Standard Mode (TF-IDF - Offline)
 
 - [X] T130 [P] [US3] Implement TF-IDF calculator in packages/backend/internal/analysis/tfidf/calculator.go (term frequency, inverse document frequency)
-- [ ] T131 [P] [US3] Implement TextRank keyword extraction in packages/backend/internal/analysis/textrank/extractor.go (graph-based ranking)
-- [ ] T132 [US3] Create AnalysisService orchestration in packages/backend/internal/services/analysis_service.go (TF-IDF mode by default)
+- [X] T131 [P] [US3] Implement TextRank keyword extraction in packages/backend/internal/analysis/textrank/extractor.go (graph-based ranking)
+- [X] T132 [US3] Create AnalysisService orchestration in packages/backend/internal/services/analysis_service.go (TF-IDF mode by default)
 
 #### AI Mode (Optional - Online)
 
@@ -277,10 +277,10 @@ Based on plan.md structure:
 
 #### API Layer (Desktop REST)
 
-- [ ] T137 [US3] Implement GET /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (get config, API key redacted)
-- [ ] T138 [US3] Implement POST /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (set encrypted credentials)
-- [ ] T139 [US3] Implement DELETE /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (disable AI mode)
-- [ ] T140 [US3] Implement POST /content/{id}/summary endpoint in packages/backend/cmd/desktop/handlers/content.go (generate summary)
+- [X] T137 [US3] Implement GET /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (get config, API key redacted)
+- [X] T138 [US3] Implement POST /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (set encrypted credentials)
+- [X] T139 [US3] Implement DELETE /ai/config endpoint in packages/backend/cmd/desktop/handlers/ai.go (disable AI mode)
+- [X] T140 [US3] Implement POST /content/{id}/summary endpoint in packages/backend/cmd/desktop/handlers/ai.go (generate summary)
 
 #### Flutter UI (Analysis)
 
