@@ -44,6 +44,12 @@ type ListBucketResult struct {
 	} `xml:"Contents"`
 }
 
+// LocationConstraint represents the S3 GetBucketLocation response.
+type LocationConstraint struct {
+	XMLName          xml.Name `xml:"LocationConstraint"`
+	LocationConstraint string   `xml:",chardata"`
+}
+
 // NewS3Client creates a new S3Client.
 func NewS3Client(config *S3Config) *S3Client {
 	return &S3Client{
@@ -146,7 +152,8 @@ func (c *S3Client) List(ctx context.Context, prefix string) ([]string, error) {
 	// Create ListObjectsV2 request
 	// Note: For bucket-level operations like ListObjectsV2, the key is empty
 	// and query parameters are handled differently
-	queryParams := "?list-type=2"
+	// Build query params without '?' prefix (buildSignedRequest handles that)
+	queryParams := "list-type=2"
 	if prefix != "" {
 		queryParams += "&prefix=" + url.QueryEscape(prefix)
 	}
@@ -182,128 +189,87 @@ func (c *S3Client) List(ctx context.Context, prefix string) ([]string, error) {
 	return keys, nil
 }
 
-// createRequest creates an S3 request with authentication.
-func (c *S3Client) createRequest(ctx context.Context, method, key string, body io.Reader) (*http.Request, error) {
-	// Build URL
-	var urlStr string
-	if c.config.ForcePathStyle {
-		// Path-style: http://endpoint/bucket/key
-		urlStr = fmt.Sprintf("%s/%s/%s", c.config.Endpoint, c.config.BucketName, key)
+// buildSignedRequest builds and signs an S3 request (unified for object and bucket operations).
+func (c *S3Client) buildSignedRequest(
+	ctx context.Context,
+	method, canonicalURI, rawQuery string,
+	body io.Reader,
+) (*http.Request, error) {
+	// Build base URL
+	base := c.config.Endpoint
+	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		base = "https://" + base
+	}
+
+	u, err := url.Parse(base)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse endpoint: %w", err)
+	}
+
+	// Set path and query for virtual-host style
+	if !c.config.ForcePathStyle {
+		u.Host = fmt.Sprintf("%s.%s", c.config.BucketName, u.Host)
+		u.Path = canonicalURI
+		u.RawQuery = rawQuery
 	} else {
-		// Virtual-host-style: http://bucket.endpoint/key
-		urlStr = fmt.Sprintf("%s.%s/%s", c.config.BucketName, c.config.Endpoint, key)
+		// Path-style: include bucket in path
+		u.Path = canonicalURI
+		u.RawQuery = rawQuery
 	}
 
 	// Create request
-	req, err := http.NewRequestWithContext(ctx, method, urlStr, body)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set host header for virtual-host style
 	if !c.config.ForcePathStyle {
-		req.Host = fmt.Sprintf("%s.%s", c.config.BucketName, c.config.Endpoint)
+		req.Host = fmt.Sprintf("%s.%s", c.config.BucketName, u.Host)
 	}
 
 	// Add AWS V4 signature headers
 	timestamp := time.Now().UTC()
 	amzDate := timestamp.Format("20060102T150405Z")
 
-	// Headers
 	req.Header.Set("Host", req.Host)
 	req.Header.Set("X-Amz-Date", amzDate)
 	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
 
-	// Calculate signature
-	authorization := c.calculateAuthorization(method, key, amzDate)
-	req.Header.Set("Authorization", authorization)
+	// Extract key from canonicalURI for signature calculation
+	// canonicalURI is either "/{bucket}/key" for objects or "/{bucket}" for bucket operations
+	key := ""
+	bucketPrefix := "/" + c.config.BucketName + "/"
+	if strings.HasPrefix(canonicalURI, bucketPrefix) {
+		key = canonicalURI[len(bucketPrefix):]
+	} else if canonicalURI == "/"+c.config.BucketName {
+		// Bucket-level operation, key remains empty
+		key = ""
+	}
+
+	// Calculate signature using unified method
+	auth := c.calculateAuthorization(method, key, amzDate, rawQuery)
+	req.Header.Set("Authorization", auth)
 
 	return req, nil
+}
+
+// createRequest creates an S3 request with authentication (object-level).
+func (c *S3Client) createRequest(ctx context.Context, method, key string, body io.Reader) (*http.Request, error) {
+	canonicalURI := "/" + c.config.BucketName + "/" + key
+	return c.buildSignedRequest(ctx, method, canonicalURI, "", body)
 }
 
 // createRequestForBucket creates a bucket-level S3 request with authentication.
 // Used for operations like ListObjectsV2 that operate on the bucket itself.
-func (c *S3Client) createRequestForBucket(ctx context.Context, method, queryParams string) (*http.Request, error) {
-	// Build URL for bucket-level operation
-	var urlStr string
-	if c.config.ForcePathStyle {
-		// Path-style: http://endpoint/bucket?params
-		urlStr = fmt.Sprintf("%s/%s%s", c.config.Endpoint, c.config.BucketName, queryParams)
-	} else {
-		// Virtual-host-style: http://bucket.endpoint?params
-		urlStr = fmt.Sprintf("%s.%s%s", c.config.BucketName, c.config.Endpoint, queryParams)
-	}
-
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, method, urlStr, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set host header for virtual-host style
-	if !c.config.ForcePathStyle {
-		req.Host = fmt.Sprintf("%s.%s", c.config.BucketName, c.config.Endpoint)
-	}
-
-	// Add AWS V4 signature headers
-	timestamp := time.Now().UTC()
-	amzDate := timestamp.Format("20060102T150405Z")
-
-	// Headers
-	req.Header.Set("Host", req.Host)
-	req.Header.Set("X-Amz-Date", amzDate)
-	req.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
-
-	// Calculate signature (use empty key for bucket-level operations)
-	authorization := c.calculateAuthorizationForBucket(method, amzDate)
-	req.Header.Set("Authorization", authorization)
-
-	return req, nil
-}
-
-// calculateAuthorizationForBucket calculates AWS V4 signature for bucket-level operations.
-func (c *S3Client) calculateAuthorizationForBucket(method, amzDate string) string {
-	// This is a simplified version of AWS Signature V4 for bucket operations
-	// In production, use the full AWS V4 signing process
-
-	// Scope
-	dateStamp := amzDate[:8]
-	scope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, c.config.Region)
-
-	// Canonical request for bucket-level operation (no key)
+func (c *S3Client) createRequestForBucket(ctx context.Context, method, rawQuery string) (*http.Request, error) {
 	canonicalURI := "/" + c.config.BucketName
-	canonicalQuery := ""
-	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-date:%s\n",
-		c.config.BucketName+"."+c.config.Endpoint, amzDate)
-	signedHeaders := "host;x-amz-date"
-
-	payloadHash := "UNSIGNED-PAYLOAD"
-
-	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
-		method, canonicalURI, canonicalQuery, canonicalHeaders, signedHeaders+" "+payloadHash)
-
-	// Create string to sign
-	algorithm := "AWS4-HMAC-SHA256"
-	credentialScope := scope
-	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s",
-		algorithm, amzDate, credentialScope, hex.EncodeToString(hashSHA256([]byte(canonicalRequest))))
-
-	// Calculate signature
-	kSecret := []byte("AWS4" + c.config.SecretKey)
-	kDate := hmacSHA256(kSecret, dateStamp)
-	kRegion := hmacSHA256(kDate, c.config.Region)
-	kService := hmacSHA256(kRegion, "s3")
-	kSigning := hmacSHA256(kService, "aws4_request")
-	signature := hex.EncodeToString(hmacSHA256(kSigning, stringToSign))
-
-	// Build authorization header
-	accessKey := c.config.AccessKey
-	return fmt.Sprintf("%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
-		algorithm, accessKey, scope, signedHeaders, signature)
+	return c.buildSignedRequest(ctx, method, canonicalURI, rawQuery, nil)
 }
+
 
 // calculateAuthorization calculates AWS V4 signature authorization header.
-func (c *S3Client) calculateAuthorization(method, key, amzDate string) string {
+func (c *S3Client) calculateAuthorization(method, key, amzDate, rawQuery string) string {
 	// This is a simplified version of AWS Signature V4
 	// In production, use the full AWS V4 signing process
 
@@ -311,17 +277,34 @@ func (c *S3Client) calculateAuthorization(method, key, amzDate string) string {
 	dateStamp := amzDate[:8]
 	scope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, c.config.Region)
 
-	// Canonical request
-	canonicalURI := "/" + c.config.BucketName + "/" + key
-	canonicalQuery := ""
-	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-date:%s\n",
-		c.config.BucketName+"."+c.config.Endpoint, amzDate)
+	// Canonical request - build URI based on whether key is present
+	// For bucket operations (empty key): /{bucket}
+	// For object operations: /{bucket}/{key}
+	var canonicalURI string
+	if key == "" {
+		canonicalURI = "/" + c.config.BucketName
+	} else {
+		canonicalURI = "/" + c.config.BucketName + "/" + key
+	}
+	canonicalQuery := rawQuery
+
+	// Build host header based on URL style
+	var hostHeader string
+	if c.config.ForcePathStyle {
+		hostHeader = c.config.Endpoint
+	} else {
+		hostHeader = c.config.BucketName + "." + c.config.Endpoint
+	}
+
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-date:%s\n", hostHeader, amzDate)
 	signedHeaders := "host;x-amz-date"
 
 	payloadHash := "UNSIGNED-PAYLOAD"
 
-	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
-		method, canonicalURI, canonicalQuery, canonicalHeaders, signedHeaders+" "+payloadHash)
+	// Canonical request format per AWS V4 spec:
+	// HTTPMethod\nCanonicalURI\nCanonicalQueryString\nCanonicalHeaders\nSignedHeaders\nHash(Payload)
+	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s%s\n%s",
+		method, canonicalURI, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash)
 
 	// Create string to sign
 	algorithm := "AWS4-HMAC-SHA256"
@@ -367,7 +350,8 @@ func (c *S3Client) TestConnection(ctx context.Context) error {
 // GetBucketLocation gets the bucket location (region).
 func (c *S3Client) GetBucketLocation(ctx context.Context) (string, error) {
 	// Create GET bucket location request (bucket-level operation)
-	req, err := c.createRequestForBucket(ctx, http.MethodGet, "?location")
+	// Use "location" query param without '?' prefix
+	req, err := c.createRequestForBucket(ctx, http.MethodGet, "location")
 	if err != nil {
 		return "", err
 	}
@@ -384,21 +368,16 @@ func (c *S3Client) GetBucketLocation(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("location request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response (simple XML)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	// Parse XML response
+	var locationConstraint LocationConstraint
+	if err := xml.NewDecoder(resp.Body).Decode(&locationConstraint); err != nil {
+		return "", fmt.Errorf("failed to parse location response: %w", err)
 	}
 
-	location := string(body)
-	if strings.Contains(location, "<LocationConstraint>") {
-		// Extract location from XML
-		start := strings.Index(location, ">") + 1
-		end := strings.Index(location[start:], "<")
-		if end > 0 {
-			return location[start : start+end], nil
-		}
+	// Empty LocationConstraint means us-east-1
+	if locationConstraint.LocationConstraint == "" {
+		return "us-east-1", nil
 	}
 
-	return "us-east-1", nil // Default
+	return locationConstraint.LocationConstraint, nil
 }

@@ -35,7 +35,7 @@ func (e *WebExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, err
 	// Parse HTML
 	doc, err := html.Parse(r)
 	if err != nil {
-		return &ParseResult{Error: err}, fmt.Errorf("failed to parse HTML: %w", err)
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
 	// Extract content

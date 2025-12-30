@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -316,7 +317,8 @@ func (s *ExportService) itemExists(id models.UUID) (bool, error) {
 		return true, nil
 	}
 	// Check if it's a "not found" error (sql.ErrNoRows)
-	if err != nil {
+	// All other errors should be propagated
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return false, err

@@ -4,6 +4,7 @@ package sync
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -283,33 +284,21 @@ func (e *SyncEngine) resolveConflicts(ctx context.Context) []*models.ConflictLog
 
 // serializeItem serializes a content item to JSON.
 func (e *SyncEngine) serializeItem(item *models.ContentItem) []byte {
-	// Simple JSON serialization
-	// In production, use proper JSON marshaling
-	format := `{"id":"%s","title":"%s","content_text":"%s","media_type":"%s","tags":"%s","version":%d,"updated_at":%d}`
-	return []byte(fmt.Sprintf(format,
-		item.ID, item.Title, escapeJSON(item.ContentText),
-		item.MediaType, item.Tags, item.Version, item.UpdatedAt))
+	data, err := json.Marshal(item)
+	if err != nil {
+		// Fallback to empty JSON on error
+		return []byte("{}")
+	}
+	return data
 }
 
 // deserializeItem deserializes a content item from JSON.
 func (e *SyncEngine) deserializeItem(data []byte) (*models.ContentItem, error) {
-	// Simple JSON deserialization
-	// In production, use proper JSON unmarshaling
-	// This is a placeholder for demonstration
-	item := &models.ContentItem{
-		ID:        "placeholder",
-		Title:     "Deserialized Item",
-		MediaType: "web",
-		Version:   1,
+	var item models.ContentItem
+	if err := json.Unmarshal(data, &item); err != nil {
+		return nil, fmt.Errorf("failed to deserialize item: %w", err)
 	}
-	return item, nil
-}
-
-// escapeJSON escapes special JSON characters.
-func escapeJSON(s string) string {
-	// Simple escaping for demonstration
-	// In production, use json.Marshal
-	return s
+	return &item, nil
 }
 
 // StartPeriodicSync starts periodic background sync.
