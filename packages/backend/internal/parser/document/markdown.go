@@ -9,6 +9,8 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
+
+	"github.com/kimhsiao/memonexus/backend/internal/parser"
 )
 
 // MarkdownExtractor implements Extractor for Markdown files.
@@ -32,7 +34,7 @@ func NewMarkdownExtractorWithFrontmatter() *MarkdownExtractor {
 }
 
 // Extract extracts content from a Markdown file.
-func (e *MarkdownExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult, error) {
+func (e *MarkdownExtractor) Extract(r io.Reader, sourceURL string) (*parser.ParseResult, error) {
 	// Read markdown content
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -52,19 +54,19 @@ func (e *MarkdownExtractor) Extract(r io.Reader, sourceURL string) (*ParseResult
 	// Convert markdown to plain text for content
 	contentText := e.markdownToPlainText(markdown)
 
-	return &ParseResult{
+	return &parser.ParseResult{
 		Title:       title,
 		ContentText: contentText,
-		MediaType:   MediaTypeMarkdown,
-		WordCount:   countWords(contentText),
-		Language:    detectLanguage(contentText),
+		MediaType:   parser.MediaTypeMarkdown,
+		WordCount:   parser.CountWords(contentText),
+		Language:    parser.DetectLanguage(contentText),
 		SourceURL:   sourceURL,
 	}, nil
 }
 
 // SupportedMediaTypes returns the media types this extractor handles.
-func (e *MarkdownExtractor) SupportedMediaTypes() []MediaType {
-	return []MediaType{MediaTypeMarkdown}
+func (e *MarkdownExtractor) SupportedMediaTypes() []parser.MediaType {
+	return []parser.MediaType{parser.MediaTypeMarkdown}
 }
 
 // removeFrontmatter removes YAML frontmatter from markdown.
@@ -104,17 +106,17 @@ func (e *MarkdownExtractor) extractTitle(markdown string) string {
 			title := strings.TrimLeft(line, "#")
 			title = strings.TrimSpace(title)
 			if title != "" {
-				return truncate(title, 500)
+				return parser.Truncate(title, 500)
 			}
 		} else if line != "" {
 			// If first non-empty line is not a heading, use it as title
-			return truncate(line, 100)
+			return parser.Truncate(line, 100)
 		}
 	}
 
 	// Fallback to first line
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) != "" {
-		return truncate(strings.TrimSpace(lines[0]), 100)
+		return parser.Truncate(strings.TrimSpace(lines[0]), 100)
 	}
 
 	return "Untitled"
@@ -127,6 +129,7 @@ func (e *MarkdownExtractor) markdownToPlainText(markdown string) string {
 	node := md.Parser().Parse(text.NewReader([]byte(markdown)))
 
 	var builder strings.Builder
+	source := []byte(markdown)
 
 	// Traverse AST and extract text
 	ast.Walk(node, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -136,12 +139,9 @@ func (e *MarkdownExtractor) markdownToPlainText(markdown string) string {
 
 		switch n.Kind() {
 		case ast.KindText:
-			text := n.(*ast.Text).Value
-			builder.Write(text)
-		case ast.KindSoftLineBreak:
-			builder.WriteString("\n")
-		case ast.KindHardLineBreak:
-			builder.WriteString("\n")
+			textNode := n.(*ast.Text)
+			segment := textNode.Segment
+			builder.Write(segment.Value(source))
 		case ast.KindParagraph:
 			builder.WriteString("\n\n")
 		case ast.KindHeading:
@@ -151,12 +151,12 @@ func (e *MarkdownExtractor) markdownToPlainText(markdown string) string {
 			builder.WriteString("\n")
 		case ast.KindListItem:
 			builder.WriteString("• ")
-		case ast.KindCodeBlock:
+		case ast.KindFencedCodeBlock:
 			code := n.(*ast.FencedCodeBlock)
 			builder.WriteString("\n```\n")
 			for i := 0; i < code.Lines().Len(); i++ {
 				line := code.Lines().At(i)
-				builder.Write(line.Value(sourceURL))
+				builder.Write(line.Value(source))
 			}
 			builder.WriteString("\n```\n\n")
 			return ast.WalkSkipChildren, nil
@@ -166,42 +166,4 @@ func (e *MarkdownExtractor) markdownToPlainText(markdown string) string {
 	})
 
 	return strings.TrimSpace(builder.String())
-}
-
-// countWords counts words in text.
-func countWords(s string) int {
-	words := strings.Fields(s)
-	return len(words)
-}
-
-// detectLanguage detects the language of text (heuristic).
-func detectLanguage(s string) string {
-	// Simple heuristic: check for non-ASCII characters
-	hasNonASCII := false
-	for _, r := range s {
-		if r > 127 {
-			hasNonASCII = true
-			break
-		}
-	}
-
-	if hasNonASCII {
-		return "unknown"
-	}
-
-	return "en"
-}
-
-// truncate truncates string to max length.
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-
-	// Try to truncate at word boundary
-	if i := strings.LastIndex(s[:maxLen], " "); i > 0 {
-		return s[:i] + "..."
-	}
-
-	return s[:maxLen] + "..."
 }

@@ -56,7 +56,7 @@ func main() {
 	// Create handlers
 	contentHandler := handlers.NewContentHandler(repository)
 	tagHandler := handlers.NewTagHandler(repository)
-	searchHandler := handlers.NewSearchHandler(database.DB)
+	searchHandler := handlers.NewSearchHandler(repository)
 
 	// Create WebSocket hub
 	wsHub := NewWSHub()

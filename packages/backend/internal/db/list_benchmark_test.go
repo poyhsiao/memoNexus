@@ -4,9 +4,7 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 // BenchmarkListRender1000Items benchmarks list rendering performance with 1,000 items
 // Constitution requirement FR-039: <500ms to render list view
 func BenchmarkListRender1000Items(b *testing.B) {
-	db := setupTestDB(b)
+	db := setupBenchmarkDB(b)
 	defer db.Close()
 
 	// Populate with 1,000 items
@@ -169,7 +167,7 @@ func BenchmarkListRender10000Items(b *testing.B) {
 		b.Skip("Skipping large benchmark in short mode")
 	}
 
-	db := setupTestDB(b)
+	db := setupBenchmarkDB(b)
 	defer db.Close()
 
 	b.Log("Populating database with 10,000 items...")

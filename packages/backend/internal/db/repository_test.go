@@ -3,7 +3,7 @@ package db
 
 import (
 	"database/sql"
-	"os"
+	"encoding/json"
 	"testing"
 
 	"github.com/kimhsiao/memonexus/backend/internal/models"
@@ -129,7 +129,7 @@ func TestGetContentItem(t *testing.T) {
 	}
 
 	// Retrieve the item
-	retrieved, err := repo.GetContentItem(created.ID)
+	retrieved, err := repo.GetContentItem(string(created.ID))
 	if err != nil {
 		t.Fatalf("GetContentItem failed: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestUpdateContentItem(t *testing.T) {
 	}
 
 	// Verify update
-	retrieved, err := repo.GetContentItem(created.ID)
+	retrieved, err := repo.GetContentItem(string(created.ID))
 	if err != nil {
 		t.Fatalf("GetContentItem failed: %v", err)
 	}
@@ -226,13 +226,13 @@ func TestDeleteContentItem(t *testing.T) {
 	}
 
 	// Delete the item
-	err = repo.DeleteContentItem(created.ID)
+	err = repo.DeleteContentItem(string(created.ID))
 	if err != nil {
 		t.Fatalf("DeleteContentItem failed: %v", err)
 	}
 
 	// Verify soft delete - item should not be found
-	_, err = repo.GetContentItem(created.ID)
+	_, err = repo.GetContentItem(string(created.ID))
 	if err == nil {
 		t.Error("Expected error when retrieving deleted item")
 	}
@@ -361,7 +361,7 @@ func TestGetTag(t *testing.T) {
 	}
 
 	// Retrieve the tag
-	retrieved, err := repo.GetTag(created.ID)
+	retrieved, err := repo.GetTag(string(created.ID))
 	if err != nil {
 		t.Fatalf("GetTag failed: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestUpdateTag(t *testing.T) {
 	}
 
 	// Verify update
-	retrieved, err := repo.GetTag(created.ID)
+	retrieved, err := repo.GetTag(string(created.ID))
 	if err != nil {
 		t.Fatalf("GetTag failed: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestDeleteTag(t *testing.T) {
 	}
 
 	// Delete the tag
-	err = repo.DeleteTag(created.ID)
+	err = repo.DeleteTag(string(created.ID))
 	if err != nil {
 		t.Fatalf("DeleteTag failed: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestCreateSyncQueue(t *testing.T) {
 
 	entry := &models.SyncQueue{
 		Operation:  "upload",
-		Payload:    `{"item_id": "test-id"}`,
+		Payload:    json.RawMessage(`{"item_id": "test-id"}`),
 		MaxRetries: 3,
 		Status:     "pending",
 	}
