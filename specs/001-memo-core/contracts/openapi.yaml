@@ -1,0 +1,1153 @@
+openapi: 3.0.3
+info:
+  title: MemoNexus API
+  description: |
+    Local-first personal knowledge base and media vault API.
+
+    **Architecture Notes**:
+    - Desktop (Win/Mac/Linux): Embedded PocketBase via REST/WebSocket
+    - Mobile (Android/iOS): Go Core via Dart FFI (this API is NOT used on mobile)
+
+    **Authentication**: Local-only (no remote auth). Desktop communicates with `localhost:8090`.
+
+  version: 1.0.0
+  contact:
+    name: MemoNexus Project
+    url: https://github.com/kimhsiao/memoNexus
+
+servers:
+  - url: http://localhost:8090/api
+    description: Local development (Desktop embedded PocketBase)
+
+tags:
+  - name: content
+    description: Content item operations
+  - name: tags
+    description: Tag management operations
+  - name: search
+    description: Full-text search operations
+  - name: analysis
+    description: AI content analysis operations
+  - name: sync
+    description: Cloud synchronization operations
+  - name: export
+    description: Data export/import operations
+
+paths:
+  # ========================================
+  # CONTENT ITEMS
+  # ========================================
+  /content:
+    get:
+      summary: List all content items
+      description: Retrieve paginated list of content items, excluding soft-deleted items.
+      operationId: listContentItems
+      tags:
+        - content
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          description: Items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: Sort field
+          required: false
+          schema:
+            type: string
+            enum: [created_at, updated_at, title]
+            default: created_at
+        - name: order
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: media_type
+          in: query
+          description: Filter by media type
+          required: false
+          schema:
+            type: string
+            enum: [web, image, video, pdf, markdown]
+        - name: tag
+          in: query
+          description: Filter by tag name
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContentItem'
+                  total:
+                    type: integer
+                    description: Total number of items matching filters
+                  page:
+                    type: integer
+                  per_page:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create a new content item
+      description: Capture content from URL or file upload.
+      operationId: createContentItem
+      tags:
+        - content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateContentFromURL'
+                - $ref: '#/components/schemas/CreateContentFromFile'
+            examples:
+              url:
+                summary: Capture from URL
+                value:
+                  type: url
+                  source_url: https://example.com/article
+                  title: "Interesting Article"
+                  tags: ["tech", "ai"]
+              file:
+                summary: Upload file
+                value:
+                  type: file
+                  file_path: /path/to/file.pdf
+                  title: "Research Paper"
+                  tags: ["research"]
+      responses:
+        '201':
+          description: Content item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /content/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Content item UUID v4
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get a content item
+      description: Retrieve a single content item by ID.
+      operationId: getContentItem
+      tags:
+        - content
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update a content item
+      description: Update title, tags, or notes. Increments version.
+      operationId: updateContentItem
+      tags:
+        - content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContentItem'
+      responses:
+        '200':
+          description: Content item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete a content item
+      description: Soft delete a content item (sets `is_deleted=1`).
+      operationId: deleteContentItem
+      tags:
+        - content
+      responses:
+        '204':
+          description: Content item deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /content/{id}/summary:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Content item UUID v4
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      summary: Generate AI summary
+      description: |
+        Generate an AI summary for the content item.
+
+        **Behavior**:
+        - If AI mode is enabled and configured: calls LLM API
+        - If AI mode is disabled or API fails: falls back to TF-IDF keyword extraction
+        - Returns summary or error with graceful degradation
+      operationId: generateSummary
+      tags:
+        - analysis
+      responses:
+        '200':
+          description: Summary generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: string
+                    description: Generated summary (AI or TF-IDF based)
+                  mode:
+                    type: string
+                    enum: [ai, standard]
+                    description: Which mode was used
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: AI service unavailable (fell back to standard mode)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ========================================
+  # TAGS
+  # ========================================
+  /tags:
+    get:
+      summary: List all tags
+      description: Retrieve all tags, excluding soft-deleted.
+      operationId: listTags
+      tags:
+        - tags
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+
+    post:
+      summary: Create a new tag
+      description: Create a user-defined tag.
+      operationId: createTag
+      tags:
+        - tags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTag'
+      responses:
+        '201':
+          description: Tag created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Tag name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Tag UUID v4
+        schema:
+          type: string
+          format: uuid
+
+    put:
+      summary: Update a tag
+      description: Update tag name or color.
+      operationId: updateTag
+      tags:
+        - tags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTag'
+      responses:
+        '200':
+          description: Tag updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete a tag
+      description: Soft delete a tag.
+      operationId: deleteTag
+      tags:
+        - tags
+      responses:
+        '204':
+          description: Tag deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ========================================
+  # SEARCH
+  # ========================================
+  /search:
+    get:
+      summary: Full-text search
+      description: |
+        Search across titles, content text, and tags using SQLite FTS5 with BM25 ranking.
+
+        **Performance**: Returns results in <100ms for up to 10,000 items.
+      operationId: search
+      tags:
+        - search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query (supports FTS5 syntax)
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          description: Maximum number of results
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: media_type
+          in: query
+          description: Filter by media type
+          required: false
+          schema:
+            type: string
+            enum: [web, image, video, pdf, markdown]
+        - name: tags
+          in: query
+          description: Filter by tag names (comma-separated)
+          required: false
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          description: Filter by created_at (Unix timestamp)
+          required: false
+          schema:
+            type: integer
+        - name: date_to
+          in: query
+          description: Filter by created_at (Unix timestamp)
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SearchResult'
+                  total:
+                    type: integer
+                  query:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ========================================
+  # AI CONFIGURATION
+  # ========================================
+  /ai/config:
+    get:
+      summary: Get AI configuration
+      description: Retrieve current AI configuration (API key redacted).
+      operationId: getAIConfig
+      tags:
+        - analysis
+      responses:
+        '200':
+          description: AI configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIConfig'
+
+    post:
+      summary: Set AI configuration
+      description: Configure AI service credentials.
+      operationId: setAIConfig
+      tags:
+        - analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAIConfig'
+      responses:
+        '200':
+          description: AI configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Disable AI mode
+      description: Clear AI configuration and switch to standard mode (TF-IDF).
+      operationId: disableAI
+      tags:
+        - analysis
+      responses:
+        '204':
+          description: AI mode disabled
+
+  # ========================================
+  # SYNC CREDENTIALS
+  # ========================================
+  /sync/credentials:
+    get:
+      summary: Get sync credentials
+      description: Retrieve S3-compatible storage credentials (secrets redacted).
+      operationId: getSyncCredentials
+      tags:
+        - sync
+      responses:
+        '200':
+          description: Sync credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCredential'
+
+    post:
+      summary: Configure sync
+      description: Set up S3-compatible storage for cloud sync.
+      operationId: configureSync
+      tags:
+        - sync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSyncCredential'
+      responses:
+        '200':
+          description: Sync configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCredential'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          description: S3 connection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Disable sync
+      description: Clear sync credentials and stop syncing.
+      operationId: disableSync
+      tags:
+        - sync
+      responses:
+        '204':
+          description: Sync disabled
+
+  /sync/status:
+    get:
+      summary: Get sync status
+      description: Retrieve current sync status.
+      operationId: getSyncStatus
+      tags:
+        - sync
+      responses:
+        '200':
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+
+  /sync/now:
+    post:
+      summary: Trigger immediate sync
+      description: Manually trigger sync operation.
+      operationId: triggerSync
+      tags:
+        - sync
+      responses:
+        '202':
+          description: Sync started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [started, in_progress]
+
+  # ========================================
+  # EXPORT/IMPORT
+  # ========================================
+  /export:
+    post:
+      summary: Export knowledge base
+      description: |
+        Create an encrypted export archive containing all content, metadata, and media files.
+
+        **Encryption**: AES-256 with user-provided password.
+        **Format**: Compressed archive (.tar.gz or .zip).
+      operationId: exportData
+      tags:
+        - export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  description: Export password (NOT stored, used for encryption only)
+                  minLength: 8
+                include_media:
+                  type: boolean
+                  description: Include media files in export
+                  default: true
+      responses:
+        '201':
+          description: Export created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportArchive'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /import:
+    post:
+      summary: Import knowledge base
+      description: |
+        Import an encrypted export archive.
+
+        **Validation**: Checks checksum and decrypts using provided password.
+      operationId: importData
+      tags:
+        - export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - archive_path
+                - password
+              properties:
+                archive_path:
+                  type: string
+                  description: Path to encrypted export archive
+                password:
+                  type: string
+                  description: Export password
+      responses:
+        '200':
+          description: Import successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported_count:
+                    type: integer
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid password or corrupted archive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+# ========================================
+# COMPONENTS
+# ========================================
+components:
+  schemas:
+    # =================== CONTENT ===================
+    ContentItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID v4
+        title:
+          type: string
+          description: Content title
+        content_text:
+          type: string
+          description: Extracted plain text content
+        source_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Original URL (for web content)
+        media_type:
+          type: string
+          enum: [web, image, video, pdf, markdown]
+          description: Media type classification
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tag names
+        summary:
+          type: string
+          nullable: true
+          description: AI-generated summary (if available)
+        is_deleted:
+          type: boolean
+          description: Soft deletion flag
+        created_at:
+          type: integer
+          description: Creation timestamp (Unix)
+        updated_at:
+          type: integer
+          description: Last update timestamp (Unix)
+        version:
+          type: integer
+          description: Version number for conflict detection
+        content_hash:
+          type: string
+          nullable: true
+          description: SHA-256 of content_text (for deduplication)
+      required:
+        - id
+        - title
+        - content_text
+        - media_type
+        - tags
+        - is_deleted
+        - created_at
+        - updated_at
+        - version
+
+    CreateContentFromURL:
+      type: object
+      required:
+        - type
+        - source_url
+      properties:
+        type:
+          type: string
+          enum: [url]
+        source_url:
+          type: string
+          format: uri
+          description: URL to fetch and extract content from
+        title:
+          type: string
+          description: Custom title (optional, auto-extracted if not provided)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags to assign (optional)
+
+    CreateContentFromFile:
+      type: object
+      required:
+        - type
+        - file_path
+      properties:
+        type:
+          type: string
+          enum: [file]
+        file_path:
+          type: string
+          description: Path to local file to ingest
+        title:
+          type: string
+          description: Custom title (optional, auto-generated if not provided)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags to assign (optional)
+
+    UpdateContentItem:
+      type: object
+      properties:
+        title:
+          type: string
+          description: New title
+        tags:
+          type: array
+          items:
+            type: string
+          description: New tags (replaces existing)
+
+    SearchResult:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/ContentItem'
+        relevance:
+          type: number
+          format: float
+          description: BM25 relevance score (lower is more relevant)
+        matched_terms:
+          type: array
+          items:
+            type: string
+          description: Terms from query that matched
+
+    # =================== TAGS ===================
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Tag name (unique)
+        color:
+          type: string
+          description: Hex color code (e.g., #3B82F6)
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        is_deleted:
+          type: boolean
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+      required:
+        - id
+        - name
+        - color
+
+    CreateTag:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          default: '#3B82F6'
+
+    UpdateTag:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        color:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+
+    # =================== AI CONFIG ===================
+    AIConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [openai, claude, ollama]
+        api_endpoint:
+          type: string
+        model_name:
+          type: string
+        max_tokens:
+          type: integer
+        is_enabled:
+          type: boolean
+      required:
+        - id
+        - provider
+        - api_endpoint
+        - model_name
+
+    SetAIConfig:
+      type: object
+      required:
+        - provider
+        - api_endpoint
+        - api_key
+      properties:
+        provider:
+          type: string
+          enum: [openai, claude, ollama]
+        api_endpoint:
+          type: string
+        api_key:
+          type: string
+          format: password
+          description: API key (will be encrypted at rest)
+        model_name:
+          type: string
+          description: Model name (e.g., gpt-4, claude-3-opus)
+        max_tokens:
+          type: integer
+          default: 1000
+
+    # =================== SYNC CREDENTIALS ===================
+    SyncCredential:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpoint:
+          type: string
+          format: uri
+        bucket_name:
+          type: string
+        region:
+          type: string
+        is_enabled:
+          type: boolean
+      required:
+        - id
+        - endpoint
+        - bucket_name
+
+    SetSyncCredential:
+      type: object
+      required:
+        - endpoint
+        - bucket_name
+        - access_key
+        - secret_key
+      properties:
+        endpoint:
+          type: string
+          format: uri
+          description: S3-compatible endpoint (e.g., https://s3.amazonaws.com)
+        bucket_name:
+          type: string
+        region:
+          type: string
+        access_key:
+          type: string
+          format: password
+        secret_key:
+          type: string
+          format: password
+
+    SyncStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [idle, syncing, failed]
+        last_sync:
+          type: integer
+          nullable: true
+          description: Last successful sync timestamp
+        pending_changes:
+          type: integer
+          description: Number of changes waiting to sync
+        error:
+          type: string
+          nullable: true
+          description: Last error message (if failed)
+
+    # =================== EXPORT ===================
+    ExportArchive:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        file_path:
+          type: string
+        checksum:
+          type: string
+          description: SHA-256 checksum
+        size_bytes:
+          type: integer
+        item_count:
+          type: integer
+        is_encrypted:
+          type: boolean
+        created_at:
+          type: integer
+      required:
+        - id
+        - file_path
+        - checksum
+        - size_bytes
+
+    # =================== ERRORS ===================
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Application-specific error code
+        details:
+          type: object
+          additionalProperties: true
+      required:
+        - error
+        - code
+
+    BadRequestError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [BAD_REQUEST]
+
+    UnauthorizedError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHORIZED]
+
+    NotFoundError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [NOT_FOUND]
+
+    ConflictError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [CONFLICT]
+            details:
+              type: object
+              properties:
+                reason:
+                  type: string
+                existing_version:
+                  type: integer
+                incoming_version:
+                  type: integer
+
+    ServiceUnavailableError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [SERVICE_UNAVAILABLE]
+            details:
+              type: object
+              properties:
+                service:
+                  type: string
+                  description: Which external service failed
+                retryable:
+                  type: boolean
+                  description: Whether operation can be retried
+
+    InternalServerError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INTERNAL_ERROR]
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BadRequestError'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnauthorizedError'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NotFoundError'
+
+    Conflict:
+      description: Conflict (e.g., concurrent edit)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalServerError'
+
+  # =================== SECURITY SCHEMES ===================
+  securitySchemes:
+    LocalAuth:
+      type: apiKey
+      in: header
+      name: X-Local-Token
+      description: |
+        Local-only authentication token.
+
+        **Note**: This is NOT a remote authentication mechanism. The desktop app
+        communicates with an embedded PocketBase instance on localhost. The token
+        is generated locally and used only to prevent unauthorized local access.
+
+security:
+  - LocalAuth: []

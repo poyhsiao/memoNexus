@@ -1,0 +1,16 @@
+# MemoNexus Project Rules
+
+You are developing MemoNexus, a local-first personal database.
+Always refer to the files in `/specs` before writing code.
+
+## Core Constraints:
+
+1. **Logic Location**: All business logic (scraping, TF-IDF, S3 sync) MUST be in the `internal/` directory (Go).
+2. **Offline-First**: Use SQLite FTS5 for all search queries. Do not assume internet access for core functions.
+3. **Data Integrity**: All tables must use UUID v4 as Primary Keys.
+4. **Platform Bridge**: Use Dart FFI for Mobile-to-Go communication.
+
+## Implementation Flow:
+
+- When asked to build a feature, first update/check the corresponding spec in `/specs`.
+- Ensure Go logic is testable via `go test`.
