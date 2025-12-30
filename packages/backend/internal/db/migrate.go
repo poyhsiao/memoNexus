@@ -190,9 +190,18 @@ func (m *Migrator) Down() error {
 		return fmt.Errorf("no migrations to rollback")
 	}
 
-	// Read down migration
-	filename := fmt.Sprintf("V%d__initial_schema.down.sql", current) // Generic pattern
-	path := filepath.Join(m.migrateDir, filename)
+	// Find the down migration file (V%d__*.down.sql pattern)
+	pattern := fmt.Sprintf("V%d__*.down.sql", current)
+	matches, err := filepath.Glob(filepath.Join(m.migrateDir, pattern))
+	if err != nil {
+		return fmt.Errorf("failed to search for rollback migration: %w", err)
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("no rollback migration found for version %d", current)
+	}
+	// Use the first match (there should be only one)
+	path := matches[0]
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read rollback migration: %w", err)

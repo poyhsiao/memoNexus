@@ -118,6 +118,10 @@ func (r *Repository) ListContentItems(limit, offset int, mediaType string) ([]*m
 		}
 		items = append(items, &item)
 	}
+	// Check for errors that occurred during iteration
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return items, nil
 }
 

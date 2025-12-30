@@ -33,7 +33,9 @@ if [[ "$ARCH" == "arm64" ]] || [[ "$ARCH" == "all" ]]; then
   echo "Building for iOS ARM64..."
   cd "$PROJECT_ROOT/packages/backend"
 
-  GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 \
+  # Use GOOS=ios for iOS (darwin targets macOS)
+  # Note: Requires Xcode command line tools and valid iOS SDK
+  GOOS=ios GOARCH=arm64 CGO_ENABLED=1 \
     go build -buildmode=c-archive \
     -o "$OUTPUT/libcore_ios_arm64.a" \
     ./cmd/mobile
