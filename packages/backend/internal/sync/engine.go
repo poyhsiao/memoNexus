@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/kimhsiao/memonexus/backend/internal/db"
@@ -30,6 +31,54 @@ const (
 	SyncStatusFailed  SyncStatus = "failed"
 )
 
+// SyncEventType represents the type of sync event.
+type SyncEventType string
+
+const (
+	SyncEventStarted      SyncEventType = "started"
+	SyncEventProgress     SyncEventType = "progress"
+	SyncEventUploadItem   SyncEventType = "upload_item"
+	SyncEventDownloadItem SyncEventType = "download_item"
+	SyncEventConflict     SyncEventType = "conflict"
+	SyncEventCompleted    SyncEventType = "completed"
+	SyncEventFailed       SyncEventType = "failed"
+	SyncEventWarning      SyncEventType = "warning"
+)
+
+// SyncEvent represents a sync event for graceful degradation notifications.
+// T175: Non-blocking event notifications for sync failures (FR-057).
+type SyncEvent struct {
+	Type      SyncEventType
+	Timestamp time.Time
+	ItemID    string
+	Message   string
+	Error     error
+	Data      map[string]interface{}
+}
+
+// SyncEventHandler defines the interface for handling sync events.
+// T175: Event handler interface for non-blocking sync notifications.
+// Implementations should avoid blocking operations to ensure sync continues.
+type SyncEventHandler interface {
+	// OnSyncEvent is called when a sync event occurs.
+	// IMPORTANT: This callback should be non-blocking and return quickly.
+	// For expensive operations, spawn a goroutine or use a queue.
+	OnSyncEvent(event SyncEvent)
+}
+
+// SyncErrorEntry represents an error in the error history.
+type SyncErrorEntry struct {
+	Timestamp time.Time
+	ItemID    string
+	Operation string
+	Error     string
+}
+
+const (
+	// maxErrorHistory is the maximum number of errors to keep in history.
+	maxErrorHistory = 100
+)
+
 // SyncOperation represents a single sync operation.
 type SyncOperation struct {
 	ID         string
@@ -43,12 +92,15 @@ type SyncOperation struct {
 
 // SyncEngine provides synchronization capabilities.
 type SyncEngine struct {
-	repo     *db.Repository
-	storage  ObjectStore
-	status   SyncStatus
-	lastSync *time.Time
-	pending  int
-	lastErr  error
+	repo          *db.Repository
+	storage       ObjectStore
+	status        SyncStatus
+	lastSync      *time.Time
+	pending       int
+	lastErr       error
+	eventHandler  SyncEventHandler
+	errorHistory  []SyncErrorEntry
+	mu            sync.RWMutex
 }
 
 // ObjectStore defines the interface for cloud storage operations.
@@ -69,9 +121,86 @@ type ObjectStore interface {
 // NewSyncEngine creates a new SyncEngine.
 func NewSyncEngine(repo *db.Repository, storage ObjectStore) *SyncEngine {
 	return &SyncEngine{
-		repo:    repo,
-		storage: storage,
-		status:  SyncStatusIdle,
+		repo:         repo,
+		storage:      storage,
+		status:       SyncStatusIdle,
+		errorHistory: make([]SyncErrorEntry, 0, maxErrorHistory),
+	}
+}
+
+// SetEventHandler sets the event handler for sync events.
+// T175: Non-blocking event handler for graceful degradation.
+func (e *SyncEngine) SetEventHandler(handler SyncEventHandler) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.eventHandler = handler
+}
+
+// GetErrorHistory returns the error history.
+// T175: Error history tracking for graceful degradation.
+func (e *SyncEngine) GetErrorHistory() []SyncErrorEntry {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	// Return a copy to prevent external modification
+	history := make([]SyncErrorEntry, len(e.errorHistory))
+	copy(history, e.errorHistory)
+	return history
+}
+
+// ClearErrorHistory clears the error history.
+func (e *SyncEngine) ClearErrorHistory() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.errorHistory = make([]SyncErrorEntry, 0, maxErrorHistory)
+}
+
+// emitEvent sends an event to the event handler in a non-blocking way.
+// T175: Graceful degradation - events are sent via goroutine to avoid blocking sync.
+func (e *SyncEngine) emitEvent(event SyncEvent) {
+	e.mu.RLock()
+	handler := e.eventHandler
+	e.mu.RUnlock()
+
+	if handler == nil {
+		return
+	}
+
+	// Set timestamp if not already set
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	// Non-blocking: spawn goroutine to handle event
+	// This ensures sync continues even if handler is slow
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[SyncEngine] Panic in event handler: %v", r)
+			}
+		}()
+		handler.OnSyncEvent(event)
+	}()
+}
+
+// recordError records an error in the error history.
+func (e *SyncEngine) recordError(itemID, operation string, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	entry := SyncErrorEntry{
+		Timestamp: time.Now(),
+		ItemID:    itemID,
+		Operation: operation,
+		Error:     err.Error(),
+	}
+
+	e.errorHistory = append(e.errorHistory, entry)
+
+	// Keep only the most recent errors
+	if len(e.errorHistory) > maxErrorHistory {
+		// Remove oldest entries
+		e.errorHistory = e.errorHistory[len(e.errorHistory)-maxErrorHistory:]
 	}
 }
 
@@ -109,6 +238,12 @@ func (e *SyncEngine) Sync(ctx context.Context) (*SyncResult, error) {
 		StartTime: time.Now(),
 	}
 
+	// Emit sync started event
+	e.emitEvent(SyncEvent{
+		Type:    SyncEventStarted,
+		Message: "Sync operation started",
+	})
+
 	defer func() {
 		result.EndTime = time.Now()
 		result.Duration = result.EndTime.Sub(result.StartTime)
@@ -116,10 +251,34 @@ func (e *SyncEngine) Sync(ctx context.Context) (*SyncResult, error) {
 		if e.lastErr != nil {
 			e.status = SyncStatusFailed
 			result.Error = e.lastErr.Error()
+
+			// Emit sync failed event
+			e.emitEvent(SyncEvent{
+				Type:    SyncEventFailed,
+				Message: "Sync operation failed",
+				Error:   e.lastErr,
+				Data: map[string]interface{}{
+					"uploaded":   result.Uploaded,
+					"downloaded": result.Downloaded,
+					"duration":   result.Duration.String(),
+				},
+			})
 		} else {
 			e.status = SyncStatusIdle
 			e.lastSync = &result.EndTime
 			e.pending = 0
+
+			// Emit sync completed event
+			e.emitEvent(SyncEvent{
+				Type:    SyncEventCompleted,
+				Message: fmt.Sprintf("Sync completed: %d uploaded, %d downloaded", result.Uploaded, result.Downloaded),
+				Data: map[string]interface{}{
+					"uploaded":   result.Uploaded,
+					"downloaded": result.Downloaded,
+					"conflicts":  result.Conflicts,
+					"duration":   result.Duration.String(),
+				},
+			})
 		}
 	}()
 
@@ -169,6 +328,7 @@ func (e *SyncEngine) uploadChanges(ctx context.Context) (int, error) {
 	}
 
 	uploaded := 0
+	warnings := 0
 
 	for _, item := range items {
 		select {
@@ -183,11 +343,32 @@ func (e *SyncEngine) uploadChanges(ctx context.Context) (int, error) {
 		// Upload to storage
 		key := fmt.Sprintf("items/%s.json", item.ID)
 		if err := e.storage.Upload(ctx, key, data); err != nil {
+			// T175: Graceful degradation - record error but continue
+			e.recordError(string(item.ID), "upload", err)
 			log.Printf("Failed to upload item %s: %v", item.ID, err)
+
+			// Emit warning event for non-blocking error
+			e.emitEvent(SyncEvent{
+				Type:    SyncEventWarning,
+				ItemID:  string(item.ID),
+				Message: fmt.Sprintf("Failed to upload item %s", item.ID),
+				Error:   err,
+			})
+			warnings++
 			continue
 		}
 
 		uploaded++
+
+		// Emit upload item event
+		e.emitEvent(SyncEvent{
+			Type:    SyncEventUploadItem,
+			ItemID:  string(item.ID),
+			Message: fmt.Sprintf("Uploaded item %s", item.ID),
+			Data: map[string]interface{}{
+				"version": item.Version,
+			},
+		})
 
 		// Create change log
 		changeLog := &models.ChangeLog{
@@ -199,6 +380,16 @@ func (e *SyncEngine) uploadChanges(ctx context.Context) (int, error) {
 			log.Printf("Failed to create change log: %v", err)
 		}
 	}
+
+	// Emit progress event
+	e.emitEvent(SyncEvent{
+		Type:    SyncEventProgress,
+		Message: fmt.Sprintf("Upload phase completed: %d uploaded, %d warnings", uploaded, warnings),
+		Data: map[string]interface{}{
+			"uploaded": uploaded,
+			"warnings": warnings,
+		},
+	})
 
 	return uploaded, nil
 }
@@ -212,6 +403,7 @@ func (e *SyncEngine) downloadChanges(ctx context.Context) (int, error) {
 	}
 
 	downloaded := 0
+	warnings := 0
 
 	for _, key := range keys {
 		select {
@@ -223,14 +415,26 @@ func (e *SyncEngine) downloadChanges(ctx context.Context) (int, error) {
 		// Download item data
 		data, err := e.storage.Download(ctx, key)
 		if err != nil {
+			// T175: Graceful degradation - record error but continue
+			e.recordError(key, "download", err)
 			log.Printf("Failed to download %s: %v", key, err)
+
+			// Emit warning event
+			e.emitEvent(SyncEvent{
+				Type:    SyncEventWarning,
+				Message: fmt.Sprintf("Failed to download %s", key),
+				Error:   err,
+			})
+			warnings++
 			continue
 		}
 
 		// Deserialize item
 		item, err := e.deserializeItem(data)
 		if err != nil {
+			e.recordError(key, "deserialize", err)
 			log.Printf("Failed to deserialize %s: %v", key, err)
+			warnings++
 			continue
 		}
 
@@ -239,22 +443,48 @@ func (e *SyncEngine) downloadChanges(ctx context.Context) (int, error) {
 		if err == sql.ErrNoRows {
 			// Item doesn't exist locally, create it
 			if err := e.repo.CreateContentItem(item); err != nil {
+				e.recordError(string(item.ID), "create", err)
 				log.Printf("Failed to create item %s: %v", item.ID, err)
+				warnings++
 				continue
 			}
 			downloaded++
+
+			// Emit download item event
+			e.emitEvent(SyncEvent{
+				Type:    SyncEventDownloadItem,
+				ItemID:  string(item.ID),
+				Message: fmt.Sprintf("Downloaded new item %s", item.ID),
+				Data: map[string]interface{}{
+					"version": item.Version,
+				},
+			})
 		} else if err != nil {
+			e.recordError(string(item.ID), "fetch_local", err)
 			log.Printf("Failed to get local item %s: %v", item.ID, err)
+			warnings++
 			continue
 		} else {
 			// Item exists, check for conflict
 			if localItem.Version < item.Version {
 				// Remote is newer, update local
 				if err := e.repo.UpdateContentItem(item); err != nil {
+					e.recordError(string(item.ID), "update", err)
 					log.Printf("Failed to update item %s: %v", item.ID, err)
+					warnings++
 					continue
 				}
 				downloaded++
+
+				// Emit download item event
+				e.emitEvent(SyncEvent{
+					Type:    SyncEventDownloadItem,
+					ItemID:  string(item.ID),
+					Message: fmt.Sprintf("Updated item %s to version %d", item.ID, item.Version),
+					Data: map[string]interface{}{
+						"version": item.Version,
+					},
+				})
 			} else if localItem.Version > item.Version {
 				// Local is newer, log conflict (will be resolved in next upload)
 				conflictLog := &models.ConflictLog{
@@ -266,9 +496,31 @@ func (e *SyncEngine) downloadChanges(ctx context.Context) (int, error) {
 				if err := e.repo.CreateConflictLog(conflictLog); err != nil {
 					log.Printf("Failed to create conflict log: %v", err)
 				}
+
+				// Emit conflict event
+				e.emitEvent(SyncEvent{
+					Type:    SyncEventConflict,
+					ItemID:  string(item.ID),
+					Message: fmt.Sprintf("Conflict detected for item %s", item.ID),
+					Data: map[string]interface{}{
+						"local_version":  localItem.Version,
+						"remote_version": item.Version,
+						"resolution":     "last_write_wins",
+					},
+				})
 			}
 		}
 	}
+
+	// Emit progress event
+	e.emitEvent(SyncEvent{
+		Type:    SyncEventProgress,
+		Message: fmt.Sprintf("Download phase completed: %d downloaded, %d warnings", downloaded, warnings),
+		Data: map[string]interface{}{
+			"downloaded": downloaded,
+			"warnings":   warnings,
+		},
+	})
 
 	return downloaded, nil
 }

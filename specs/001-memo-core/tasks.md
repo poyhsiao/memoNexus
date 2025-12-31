@@ -319,46 +319,46 @@ Based on plan.md structure:
 
 #### S3-Compatible Storage (Go Core)
 
-- [X] T151 [P] [US4] Implement S3 client interface in packages/backend/internal/sync/s3/client.go (Upload, Download, Delete, List methods)
-- [ ] T152 [P] [US4] Implement AWS S3 provider in packages/backend/internal/sync/s3/aws.go
-- [ ] T153 [P] [US4] Implement Cloudflare R2 provider in packages/backend/internal/sync/s3/r2.go
-- [ ] T154 [P] [US4] Implement MinIO provider in packages/backend/internal/sync/s3/minio.go (self-hosted S3-compatible)
+- [X] T151 [P] [US4] Implement S3 client interface in packages/backend/internal/sync/s3_client.go (Upload, Download, Delete, List methods)
+- [X] T152 [P] [US4] Implement AWS S3 provider in packages/backend/internal/sync/s3/aws.go
+- [X] T153 [P] [US4] Implement Cloudflare R2 provider in packages/backend/internal/sync/s3/r2.go
+- [X] T154 [P] [US4] Implement MinIO provider in packages/backend/internal/sync/s3/minio.go (self-hosted S3-compatible)
 
 #### Sync Engine (Go Core)
 
-- [X] T155 [US4] Implement incremental sync logic in packages/backend/internal/sync/engine/sync.go (change_log-based incremental uploads)
+- [X] T155 [US4] Implement incremental sync logic in packages/backend/internal/sync/engine.go (change_log-based incremental uploads)
 - [X] T156 [US4] Implement conflict resolver in packages/backend/internal/sync/conflict/resolver.go (last write wins per updated_at, conflict logging)
 - [X] T157 [US4] Implement sync queue manager in packages/backend/internal/sync/queue/queue.go (offline queuing, exponential backoff, retry logic)
-- [ ] T158 [US4] Implement SHA-256 content addressing for media files in packages/backend/internal/sync/storage/content_addressed.go (deduplication)
+- [X] T158 [US4] Implement SHA-256 content addressing for media files in packages/backend/internal/sync/storage/content_addressed.go (deduplication)
 
 #### API Layer (Desktop REST)
 
-- [ ] T159 [US4] Implement GET /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (get config, secrets redacted)
-- [ ] T160 [US4] Implement POST /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (set encrypted credentials, test S3 connection)
-- [ ] T161 [US4] Implement DELETE /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (disable sync)
-- [ ] T162 [US4] Implement GET /sync/status endpoint in packages/backend/cmd/desktop/handlers/sync.go (current status, last sync, pending changes)
-- [ ] T163 [US4] Implement POST /sync/now endpoint in packages/backend/cmd/desktop/handlers/sync.go (trigger immediate sync)
+- [X] T159 [US4] Implement GET /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (get config, secrets redacted)
+- [X] T160 [US4] Implement POST /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (set encrypted credentials, test S3 connection)
+- [X] T161 [US4] Implement DELETE /sync/credentials endpoint in packages/backend/cmd/desktop/handlers/sync.go (disable sync)
+- [X] T162 [US4] Implement GET /sync/status endpoint in packages/backend/cmd/desktop/handlers/sync.go (current status, last sync, pending changes)
+- [X] T163 [US4] Implement POST /sync/now endpoint in packages/backend/cmd/desktop/handlers/sync.go (trigger immediate sync)
 
 #### WebSocket Events (Sync Progress)
 
-- [ ] T164 [US4] Implement sync.started WebSocket event in packages/backend/cmd/desktop/websocket.go
-- [ ] T165 [US4] Implement sync.progress WebSocket event in packages/backend/cmd/desktop/websocket.go (percent, completed, total, current item)
-- [ ] T166 [US4] Implement sync.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (uploaded, downloaded, duration)
-- [ ] T167 [US4] Implement sync.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code, retryable, retry_after)
-- [ ] T168 [US4] Implement sync.conflict_detected WebSocket event in packages/backend/cmd/desktop/websocket.go (conflicts array, resolution)
+- [X] T164 [US4] Implement sync.started WebSocket event in packages/backend/cmd/desktop/websocket.go
+- [X] T165 [US4] Implement sync.progress WebSocket event in packages/backend/cmd/desktop/websocket.go (percent, completed, total, current item)
+- [X] T166 [US4] Implement sync.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (uploaded, downloaded, duration)
+- [X] T167 [US4] Implement sync.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code, retryable, retry_after)
+- [X] T168 [US4] Implement sync.conflict_detected WebSocket event in packages/backend/cmd/desktop/websocket.go (conflicts array, resolution)
 
 #### Flutter UI (Sync)
 
-- [ ] T169 [P] [US4] Create sync configuration screen in apps/frontend/lib/screens/sync_config_screen.dart (S3 endpoint, bucket, credentials)
-- [ ] T170 [P] [US4] Create sync status widget in apps/frontend/lib/widgets/sync_status.dart (status indicator, last synced, pending count)
-- [ ] T171 [P] [US4] Create sync progress widget in apps/frontend/lib/widgets/sync_progress.dart (progress bar, current item)
-- [ ] T172 [P] [US4] Create conflict log viewer in apps/frontend/lib/screens/conflict_log_screen.dart (list of detected conflicts with resolutions)
-- [ ] T173 [US4] Create SyncConfig Riverpod provider in apps/frontend/lib/providers/sync_provider.dart
+- [X] T169 [P] [US4] Create sync configuration screen in apps/frontend/lib/screens/sync_config_screen.dart (S3 endpoint, bucket, credentials)
+- [X] T170 [P] [US4] Create sync status widget in apps/frontend/lib/widgets/sync_status.dart (status indicator, last synced, pending count)
+- [X] T171 [P] [US4] Create sync progress widget in apps/frontend/lib/widgets/sync_progress.dart (progress bar, current item)
+- [X] T172 [P] [US4] Create conflict log viewer in apps/frontend/lib/screens/conflict_log_screen.dart (list of detected conflicts with resolutions)
+- [X] T173 [US4] Create SyncConfig Riverpod provider in apps/frontend/lib/providers/sync_provider.dart
 
 #### Background Sync (Go Core)
 
-- [ ] T174 [US4] Implement background sync scheduler in packages/backend/internal/sync/scheduler/scheduler.go (periodic sync when online, queue processing when offline)
-- [ ] T175 [US4] Add graceful degradation for sync failures in packages/backend/internal/sync/engine/sync.go (non-blocking notifications per FR-057)
+- [X] T174 [US4] Implement background sync scheduler in packages/backend/internal/sync/scheduler/scheduler.go (periodic sync when online, queue processing when offline)
+- [X] T175 [US4] Add graceful degradation for sync failures in packages/backend/internal/sync/engine.go (non-blocking notifications per FR-057)
 
 **Checkpoint**: At this point, User Stories 1-4 should all work independently. Users can sync knowledge base across devices with conflict-aware incremental updates.
 
@@ -375,9 +375,9 @@ Based on plan.md structure:
 
 ### Unit Tests for User Story 5
 
-- [ ] T176 [P] [US5] Unit test for archive encryption (AES-256) in packages/backend/internal/export/crypto/crypto_test.go
-- [ ] T177 [P] [US5] Unit test for archive compression (tar.gz) in packages/backend/internal/export/compression/compress_test.go
-- [ ] T178 [P] [US5] Unit test for checksum validation (SHA-256) in packages/backend/internal/export/checksum/checksum_test.go
+- [X] T176 [P] [US5] Unit test for archive encryption (AES-256) in packages/backend/internal/export/crypto_test.go
+- [X] T177 [P] [US5] Unit test for archive compression (tar.gz) in packages/backend/internal/export/compress_test.go
+- [X] T178 [P] [US5] Unit test for checksum validation (SHA-256) in packages/backend/internal/export/checksum_test.go
 
 ### Implementation for User Story 5
 
@@ -396,18 +396,18 @@ Based on plan.md structure:
 
 #### API Layer (Desktop REST)
 
-- [ ] T186 [US5] Implement POST /export endpoint in packages/backend/cmd/desktop/handlers/export.go (trigger export with password, include_media option)
-- [ ] T187 [US5] Implement POST /import endpoint in packages/backend/cmd/desktop/handlers/export.go (import archive with password, validation, restoration)
+- [X] T186 [US5] Implement POST /export endpoint in packages/backend/cmd/desktop/handlers/export.go (trigger export with password, include_media option)
+- [X] T187 [US5] Implement POST /import endpoint in packages/backend/cmd/desktop/handlers/export.go (import archive with password, validation, restoration)
 
 #### WebSocket Events (Export Progress)
 
-- [ ] T188 [US5] Implement export.started WebSocket event in packages/backend/cmd/desktop/websocket.go
-- [ ] T189 [US5] Implement export.progress WebSocket event in packages/backend/cmd/desktop/websocket.go (stage, percent, current file)
-- [ ] T190 [US5] Implement export.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (file path, size, item count, checksum)
-- [ ] T191 [US5] Implement export.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code, message)
-- [ ] T192 [US5] Implement import.started WebSocket event in packages/backend/cmd/desktop/websocket.go
-- [ ] T193 [US5] Implement import.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (imported count, skipped count)
-- [ ] T194 [US5] Implement import.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code: INVALID_PASSWORD, CORRUPTED_ARCHIVE)
+- [X] T188 [US5] Implement export.started WebSocket event in packages/backend/cmd/desktop/websocket.go
+- [X] T189 [US5] Implement export.progress WebSocket event in packages/backend/cmd/desktop/websocket.go (stage, percent, current file)
+- [X] T190 [US5] Implement export.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (file path, size, item count, checksum)
+- [X] T191 [US5] Implement export.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code, message)
+- [X] T192 [US5] Implement import.started WebSocket event in packages/backend/cmd/desktop/websocket.go
+- [X] T193 [US5] Implement import.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (imported count, skipped count)
+- [X] T194 [US5] Implement import.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (error code: INVALID_PASSWORD, CORRUPTED_ARCHIVE)
 
 #### Flutter UI (Export/Import)
 
