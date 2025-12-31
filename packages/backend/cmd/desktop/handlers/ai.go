@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/kimhsiao/memonexus/backend/internal/analysis"
@@ -16,9 +17,17 @@ import (
 
 // AIHandler handles AI configuration and content analysis operations.
 type AIHandler struct {
-	repo           *db.Repository
-	analysisSvc    *services.AnalysisService
-	machineID       string // For encryption key derivation
+	repo        *db.Repository
+	analysisSvc *services.AnalysisService
+	machineID    string // For encryption key derivation
+	wsHub       WSWebSocketBroadcaster // WebSocket broadcaster for T145-T147
+}
+
+// WSWebSocketBroadcaster interface for WebSocket events.
+type WSWebSocketBroadcaster interface {
+	BroadcastAnalysisStarted(contentID string, operation string)
+	BroadcastAnalysisCompleted(contentID string, result map[string]interface{})
+	BroadcastAnalysisFailed(contentID string, errMsg string, fallbackMethod string)
 }
 
 // NewAIHandler creates a new AIHandler.
@@ -30,7 +39,13 @@ func NewAIHandler(repo *db.Repository, analysisSvc *services.AnalysisService, ma
 		repo:        repo,
 		analysisSvc: analysisSvc,
 		machineID:    machineID,
+		wsHub:       nil, // Set via SetWebSocketHub after creation
 	}
+}
+
+// SetWebSocketHub sets the WebSocket hub for broadcasting analysis events.
+func (h *AIHandler) SetWebSocketHub(wsHub WSWebSocketBroadcaster) {
+	h.wsHub = wsHub
 }
 
 // =====================================================
@@ -244,9 +259,18 @@ func (h *AIHandler) GenerateSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// T145-T147: Broadcast analysis started event
+	if h.wsHub != nil {
+		h.wsHub.BroadcastAnalysisStarted(contentID, "summary")
+	}
+
 	// Generate summary using analysis service
 	result, err := h.analysisSvc.GenerateSummary(r.Context(), item.ContentText)
 	if err != nil {
+		// T147: Broadcast analysis failed event with graceful degradation info
+		if h.wsHub != nil {
+			h.wsHub.BroadcastAnalysisFailed(contentID, err.Error(), "tfidf")
+		}
 		http.Error(w, "Failed to generate summary: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -254,15 +278,28 @@ func (h *AIHandler) GenerateSummary(w http.ResponseWriter, r *http.Request) {
 	// Update content item with summary
 	item.Summary = result
 	if err := h.repo.UpdateContentItem(item); err != nil {
+		// T147: Broadcast save failure
+		if h.wsHub != nil {
+			h.wsHub.BroadcastAnalysisFailed(contentID, "failed to save summary", "")
+		}
 		http.Error(w, "Failed to save summary", http.StatusInternalServerError)
 		return
 	}
 
+	// T146: Broadcast analysis completed event
+	if h.wsHub != nil {
+		h.wsHub.BroadcastAnalysisCompleted(contentID, map[string]interface{}{
+			"operation": "summary",
+			"summary":   result,
+			"method":    "tfidf", // Will be updated to detect actual method
+		})
+	}
+
 	response := map[string]interface{}{
-		"content_id":  contentID,
-		"summary":     result,
-		"method":      "ai", // or "extractive" if fallback used
-		"language":    "detected",
+		"content_id": contentID,
+		"summary":    result,
+		"method":     "ai", // or "extractive" if fallback used
+		"language":   "detected",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -294,11 +331,29 @@ func (h *AIHandler) ExtractKeywords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// T145-T147: Broadcast analysis started event
+	if h.wsHub != nil {
+		h.wsHub.BroadcastAnalysisStarted(contentID, "keywords")
+	}
+
 	// Extract keywords using analysis service
 	keywords, err := h.analysisSvc.ExtractKeywords(r.Context(), item.ContentText)
 	if err != nil {
+		// T147: Broadcast analysis failed event with graceful degradation info
+		if h.wsHub != nil {
+			h.wsHub.BroadcastAnalysisFailed(contentID, err.Error(), "textrank")
+		}
 		http.Error(w, "Failed to extract keywords: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// T146: Broadcast analysis completed event
+	if h.wsHub != nil {
+		h.wsHub.BroadcastAnalysisCompleted(contentID, map[string]interface{}{
+			"operation": "keywords",
+			"keywords":  keywords,
+			"method":    "textrank", // Will be updated to detect actual method
+		})
 	}
 
 	response := map[string]interface{}{

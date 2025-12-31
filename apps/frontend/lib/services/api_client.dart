@@ -270,13 +270,26 @@ class MemoNexusAPIClient {
 
   Future<Map<String, dynamic>> generateSummary(String id) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/content/$id/summary'),
+      Uri.parse('$baseUrl/content/analyze')
+          .replace(queryParameters: {'id': id, 'operation': 'summary'}),
       headers: _headers,
     );
     _checkError(response);
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return data;
+  }
+
+  Future<List<String>> extractKeywords(String id) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/content/analyze')
+          .replace(queryParameters: {'id': id, 'operation': 'keywords'}),
+      headers: _headers,
+    );
+    _checkError(response);
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (data['keywords'] as List<dynamic>).cast<String>();
   }
 
   // =====================================================

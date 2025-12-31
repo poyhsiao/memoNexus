@@ -1,81 +1,64 @@
-# MemoNexus .gitignore
-
-# Build outputs
-build/
-dist/
+# Go
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-*.a
-*.framework
-
-# Go
 *.test
 *.out
-go.work.sum
-# Don't ignore go.sum in modules
-!*/go.sum
+vendor/
+go.work
 
 # Flutter / Dart
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
-.metadata
-android/app/src/main/assets/data/
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/.last_build_id
-ios/.generated/
-ios/Flutter/ephemeral/
+apps/frontend/build/
+apps/frontend/.dart_tool/
+apps/frontend/.flutter-plugins
+apps/frontend/.flutter-plugins-dependencies
+apps/frontend/.packages
+apps/frontend/.pub-cache/
+apps/frontend/.pub/
+apps/frontend/pubspec.lock
 
-# Node.js / pnpm
-node_modules/
-.pnpm-store/
-*.log
-*.tsbuildinfo
+# PocketBase
+*.pb.db
+*.pb.db-shm
+*.pb.db-wal
+data/
 
 # IDEs
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 .DS_Store
 Thumbs.db
 
-# Local data
-data/
-*.db
-*.db-shm
-*.db-wal
-
 # Logs
-logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Environment (never commit secrets)
+# Environment
 .env
 .env.local
 .env.*.local
-!.env.example
+
+# Coverage
+coverage/
+*.coverprofile
+*.out
+
+# Build artifacts
+dist/
+build/
+bin/
+obj/
+out/
 
 # Temporary files
 *.tmp
-*.temp
-.cache/
-
-# Encryption keys (never commit)
-*.key
-*.pem
-*.crt
-secrets/
-
-# Export archives (may contain sensitive data)
-*.encrypted
-exports/
+*.bak
+*.cache
