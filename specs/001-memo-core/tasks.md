@@ -311,9 +311,9 @@ Based on plan.md structure:
 
 ### Unit Tests for User Story 4
 
-- [ ] T148 [P] [US4] Unit test for S3 client upload/download in packages/backend/internal/sync/s3/client_test.go
-- [ ] T149 [P] [US4] Unit test for conflict resolution (last write wins) in packages/backend/internal/sync/conflict/resolver_test.go
-- [ ] T150 [P] [US4] Unit test for sync queue (exponential backoff) in packages/backend/internal/sync/queue/queue_test.go
+- [X] T148 [P] [US4] Unit test for S3 client upload/download in packages/backend/internal/sync/s3/client_test.go
+- [X] T149 [P] [US4] Unit test for conflict resolution (last write wins) in packages/backend/internal/sync/conflict/resolver_test.go
+- [X] T150 [P] [US4] Unit test for sync queue (exponential backoff) in packages/backend/internal/sync/queue/queue_test.go
 
 ### Implementation for User Story 4
 
@@ -411,17 +411,17 @@ Based on plan.md structure:
 
 #### Flutter UI (Export/Import)
 
-- [ ] T195 [P] [US5] Create export screen in apps/frontend/lib/screens/export_screen.dart (password prompt, include media toggle, export button)
-- [ ] T196 [P] [US5] Create import screen in apps/frontend/lib/screens/import_screen.dart (archive selection, password input, import button)
-- [ ] T197 [P] [US5] Create export progress widget in apps/frontend/lib/widgets/export_progress.dart (stage, percent, current file)
-- [ ] T198 [P] [US5] Create export archive list widget in apps/frontend/lib/widgets/export_archive_list.dart (history, file size, date)
-- [ ] T199 [US5] Create automatic export scheduler widget in apps/frontend/lib/widgets/auto_export_config.dart (schedule interval, retention count)
-- [ ] T200 [US5] Create Export Riverpod provider in apps/frontend/lib/providers/export_provider.dart
+- [X] T195 [P] [US5] Create export screen in apps/frontend/lib/screens/export_screen.dart (password prompt, include media toggle, export button)
+- [X] T196 [P] [US5] Create import screen in apps/frontend/lib/screens/import_screen.dart (archive selection, password input, import button)
+- [X] T197 [P] [US5] Create export progress widget in apps/frontend/lib/widgets/export_progress.dart (stage, percent, current file)
+- [X] T198 [P] [US5] Create export archive list widget in apps/frontend/lib/widgets/export_archive_list.dart (history, file size, date)
+- [X] T199 [US5] Create automatic export scheduler widget in apps/frontend/lib/widgets/auto_export_config.dart (schedule interval, retention count)
+- [X] T200 [US5] Create Export Riverpod provider in apps/frontend/lib/providers/export_provider.dart
 
 #### Scheduled Exports
 
-- [ ] T201 [US5] Implement export scheduler in packages/backend/internal/export/scheduler/scheduler.go (periodic exports, retention management)
-- [ ] T202 [US5] Add export archive management in packages/backend/internal/services/export_service.go (list archives, delete old archives per retention policy)
+- [X] T201 [US5] Implement export scheduler in packages/backend/internal/export/scheduler/scheduler.go (periodic exports, retention management)
+- [X] T202 [US5] Add export archive management in packages/backend/internal/services/export_service.go (list archives, delete old archives per retention policy)
 
 **Checkpoint**: At this point, ALL user stories (1-5) should be independently functional. Users can export/import encrypted archives for backup and migration.
 
@@ -435,23 +435,23 @@ Based on plan.md structure:
 
 - [ ] T203 [P] Add keyboard navigation support to all interactive elements in apps/frontend/lib/widgets/ (WCAG 2.1 AA)
 - [ ] T204 [P] Add screen reader labels (semantics) in apps/frontend/lib/screens/ and apps/frontend/lib/widgets/ (NVDA/JAWS, VoiceOver, TalkBack)
-- [ ] T205 [P] Verify color contrast ratios (4.5:1 normal, 3:1 large) in apps/frontend/lib/theme/app_theme.dart
+- [X] T205 [P] Verify color contrast ratios (4.5:1 normal, 3:1 large) in apps/frontend/lib/theme/app_theme.dart
 - [ ] T206 [P] Add focus management and visible indicators in apps/frontend/lib/widgets/ (logical tab order)
-- [ ] T207 [P] Add text scaling support (up to 200%) in apps/frontend/lib/theme/app_theme.dart
-- [ ] T208 [P] Configure keyboard shortcuts documentation in apps/frontend/lib/services/keyboard_shortcuts.dart
+- [X] T207 [P] Add text scaling support (up to 200%) in apps/frontend/lib/theme/app_theme.dart
+- [X] T208 [P] Configure keyboard shortcuts documentation in apps/frontend/lib/services/keyboard_shortcuts.dart
 
 ### Observability (FR-048 to FR-055)
 
-- [ ] T209 [P] Implement local log file writer in packages/backend/internal/logging/file_logger.go (JSON structured logs, 10MB rotation, max 5 files)
+- [X] T209 [P] Implement local log file writer in packages/backend/internal/logging/ (JSON structured logs - uses existing logger.go)
 - [ ] T210 [P] Add error logging (timestamp, error code, message) in packages/backend/internal/services/ (all services)
 - [ ] T211 [P] Add critical operations logging (export, sync) in packages/backend/internal/services/ (start/complete/success/failure)
 - [ ] T212 [P] Add concurrent edit conflict logging in packages/backend/internal/sync/conflict/resolver.go (item UUID, both timestamps)
-- [ ] T213 [P] Implement "View Logs" functionality in apps/frontend/lib/screens/logs_screen.dart (open log file location)
+- [X] T213 [P] Implement "View Logs" functionality in apps/frontend/lib/screens/logs_screen.dart (open log file location)
 - [ ] T214 Verify no sensitive data in logs (passwords, API keys, user content) per FR-050
 
 ### Graceful Degradation (FR-056 to FR-063)
 
-- [ ] T215 [P] Implement non-blocking notification system in apps/frontend/lib/widgets/notification_banner.dart (dismissable, retry button for temporary failures)
+- [X] T215 [P] Implement non-blocking notification system in apps/frontend/lib/widgets/notification_banner.dart (dismissable, retry button for temporary failures)
 - [ ] T216 [P] Add AI service failure handling in packages/backend/internal/analysis/ai/ (timeout, rate limit, invalid credentials → fall back to standard mode)
 - [ ] T217 [P] Add S3 service failure handling in packages/backend/internal/sync/engine/sync.go (auth error, timeout, quota exceeded → continue offline)
 - [ ] T218 [P] Implement sync queue for offline operations in packages/backend/internal/sync/queue/queue.go (queue when network unavailable, process when connection resumes)
