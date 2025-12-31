@@ -54,6 +54,25 @@ const (
 	EventAnalysisStarted  = "analysis.started"
 	EventAnalysisCompleted = "analysis.completed"
 	EventAnalysisFailed    = "analysis.failed"
+
+	// Sync events (T164-T168)
+	EventSyncStarted         = "sync.started"
+	EventSyncProgress        = "sync.progress"
+	EventSyncCompleted       = "sync.completed"
+	EventSyncFailed          = "sync.failed"
+	EventSyncConflictDetected = "sync.conflict_detected"
+
+	// Export events (T188-T189)
+	EventExportStarted  = "export.started"
+	EventExportProgress = "export.progress"
+	EventExportCompleted = "export.completed"
+	EventExportFailed    = "export.failed"
+
+	// Import events (T188-T189)
+	EventImportStarted  = "import.started"
+	EventImportProgress = "import.progress"
+	EventImportCompleted = "import.completed"
+	EventImportFailed    = "import.failed"
 )
 
 // NewWSHub creates a new WebSocket hub.
@@ -146,6 +165,128 @@ func (h *WSHub) BroadcastAnalysisFailed(contentID string, errMsg string, fallbac
 		"content_id":      contentID,
 		"error":           errMsg,
 		"fallback_method": fallbackMethod, // "tfidf" or "textrank"
+	})
+}
+
+// =====================================================
+// Sync Event Broadcasters (T164-T168)
+// =====================================================
+
+// BroadcastSyncStarted notifies clients that sync has started (T164).
+func (h *WSHub) BroadcastSyncStarted() {
+	h.Broadcast(EventSyncStarted, map[string]interface{}{
+		"status": "started",
+	})
+}
+
+// BroadcastSyncProgress notifies clients of sync progress (T165).
+func (h *WSHub) BroadcastSyncProgress(percent int, completed int, total int, currentItem string) {
+	h.Broadcast(EventSyncProgress, map[string]interface{}{
+		"percent":     percent,
+		"completed":   completed,
+		"total":       total,
+		"current_item": currentItem,
+	})
+}
+
+// BroadcastSyncCompleted notifies clients that sync completed successfully (T166).
+func (h *WSHub) BroadcastSyncCompleted(uploaded int, downloaded int, duration time.Duration) {
+	h.Broadcast(EventSyncCompleted, map[string]interface{}{
+		"uploaded":   uploaded,
+		"downloaded": downloaded,
+		"duration":   duration.Milliseconds(), // Duration in milliseconds
+		"status":     "completed",
+	})
+}
+
+// BroadcastSyncFailed notifies clients that sync failed (T167).
+func (h *WSHub) BroadcastSyncFailed(errorCode string, retryable bool, retryAfter int) {
+	h.Broadcast(EventSyncFailed, map[string]interface{}{
+		"error_code": errorCode,
+		"retryable":  retryable,
+		"retry_after": retryAfter, // Seconds until retry suggested
+		"status":     "failed",
+	})
+}
+
+// BroadcastSyncConflictDetected notifies clients that sync conflicts were detected (T168).
+func (h *WSHub) BroadcastSyncConflictDetected(conflicts []map[string]interface{}, resolution string) {
+	h.Broadcast(EventSyncConflictDetected, map[string]interface{}{
+		"conflicts":  conflicts,
+		"resolution": resolution, // "last_write_wins", "manual_review", etc.
+	})
+}
+
+// =====================================================
+// Export Event Broadcasters (T188-T189)
+// =====================================================
+
+// BroadcastExportStarted notifies clients that export has started (T188).
+func (h *WSHub) BroadcastExportStarted(includeMedia bool, encrypted bool) {
+	h.Broadcast(EventExportStarted, map[string]interface{}{
+		"include_media": includeMedia,
+		"encrypted":     encrypted,
+	})
+}
+
+// BroadcastExportProgress notifies clients of export progress (T189).
+func (h *WSHub) BroadcastExportProgress(stage string, percent int, currentItem string) {
+	h.Broadcast(EventExportProgress, map[string]interface{}{
+		"stage":         stage, // "creating", "compressing", "encrypting", etc.
+		"percent":       percent,
+		"current_file":  currentItem,
+	})
+}
+
+// BroadcastExportCompleted notifies clients that export completed successfully (T189).
+func (h *WSHub) BroadcastExportCompleted(filePath string, sizeBytes int64, itemCount int, checksum string) {
+	h.Broadcast(EventExportCompleted, map[string]interface{}{
+		"file_path":  filePath,
+		"size_bytes": sizeBytes,
+		"item_count": itemCount,
+		"checksum":   checksum,
+	})
+}
+
+// BroadcastExportFailed notifies clients that export failed (T189).
+func (h *WSHub) BroadcastExportFailed(errorMsg string) {
+	h.Broadcast(EventExportFailed, map[string]interface{}{
+		"error": errorMsg,
+	})
+}
+
+// =====================================================
+// Import Event Broadcasters (T188-T189)
+// =====================================================
+
+// BroadcastImportStarted notifies clients that import has started (T188).
+func (h *WSHub) BroadcastImportStarted(archivePath string) {
+	h.Broadcast(EventImportStarted, map[string]interface{}{
+		"archive_path": archivePath,
+	})
+}
+
+// BroadcastImportProgress notifies clients of import progress (T189).
+func (h *WSHub) BroadcastImportProgress(stage string, percent int, currentItem string) {
+	h.Broadcast(EventImportProgress, map[string]interface{}{
+		"stage":         stage, // "validating", "extracting", "decrypting", "restoring", etc.
+		"percent":       percent,
+		"current_item":  currentItem,
+	})
+}
+
+// BroadcastImportCompleted notifies clients that import completed successfully (T189).
+func (h *WSHub) BroadcastImportCompleted(importedCount int, skippedCount int) {
+	h.Broadcast(EventImportCompleted, map[string]interface{}{
+		"imported_count": importedCount,
+		"skipped_count":  skippedCount,
+	})
+}
+
+// BroadcastImportFailed notifies clients that import failed (T189).
+func (h *WSHub) BroadcastImportFailed(errorMsg string) {
+	h.Broadcast(EventImportFailed, map[string]interface{}{
+		"error": errorMsg,
 	})
 }
 

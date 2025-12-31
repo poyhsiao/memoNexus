@@ -10,6 +10,8 @@ import (
 	"github.com/kimhsiao/memonexus/backend/internal/db"
 	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/services"
+	"github.com/kimhsiao/memonexus/backend/internal/sync"
+	"github.com/kimhsiao/memonexus/backend/internal/sync/queue"
 	"github.com/kimhsiao/memonexus/backend/cmd/desktop/handlers"
 )
 
@@ -57,7 +59,12 @@ func main() {
 	// Create WebSocket hub
 	wsHub := NewWSHub()
 
-	// Create analysis service with WebSocket support (T145-T147)
+	// Create sync components (T159-T163, T164-T168)
+	// Note: S3 client will be configured when credentials are set via API
+	syncQueue := queue.NewSyncQueue(100)
+	syncEngine := sync.NewSyncEngine(repository, nil) // nil storage - configured via API
+
+	// Create handlers
 	analysisService := services.NewAnalysisService(services.DefaultAnalysisConfig())
 	analysisService.SetWebSocketBroadcaster(wsHub)
 
@@ -67,6 +74,10 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(repository)
 	aiHandler := handlers.NewAIHandler(repository, analysisService, os.Getenv("MACHINE_ID"))
 	aiHandler.SetWebSocketHub(wsHub) // T145-T147: Enable WebSocket events
+
+	// Create sync handler (T159-T163, T164-T168)
+	syncHandler := handlers.NewSyncHandler(repository, syncEngine, syncQueue, os.Getenv("MACHINE_ID"))
+	syncHandler.SetWebSocketHub(wsHub) // T164-T168: Enable WebSocket events
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -164,6 +175,37 @@ func main() {
 			default:
 				http.Error(w, "Invalid operation: use 'summary' or 'keywords'", http.StatusBadRequest)
 			}
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Sync configuration routes (T159-T161)
+	mux.HandleFunc("/api/sync/credentials", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			syncHandler.GetCredentials(w, r)
+		case http.MethodPost:
+			syncHandler.SetCredentials(w, r)
+		case http.MethodDelete:
+			syncHandler.DeleteCredentials(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Sync status and trigger routes (T162-T163)
+	mux.HandleFunc("/api/sync/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			syncHandler.GetStatus(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/sync/now", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			syncHandler.TriggerSync(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}

@@ -376,3 +376,58 @@ func (r *Repository) DisableAllAIConfig() error {
 	_, err := r.db.Exec(query)
 	return err
 }
+
+// =====================================================
+// Sync Credential Methods (T159-T161)
+// =====================================================
+
+// GetSyncCredentials retrieves the currently enabled sync credentials.
+func (r *Repository) GetSyncCredentials() (*models.SyncCredential, error) {
+	query := `SELECT id, endpoint, bucket_name, region, access_key_encrypted, secret_key_encrypted, is_enabled, created_at, updated_at
+			  FROM sync_credentials WHERE is_enabled = 1 LIMIT 1`
+
+	var cred models.SyncCredential
+	err := r.db.QueryRow(query).Scan(
+		&cred.ID, &cred.Endpoint, &cred.BucketName, &cred.Region,
+		&cred.AccessKeyEncrypted, &cred.SecretKeyEncrypted,
+		&cred.IsEnabled, &cred.CreatedAt, &cred.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return &cred, nil
+}
+
+// SaveSyncCredential saves a new sync credential configuration.
+func (r *Repository) SaveSyncCredential(cred *models.SyncCredential) error {
+	query := `INSERT INTO sync_credentials (id, endpoint, bucket_name, region, access_key_encrypted, secret_key_encrypted, is_enabled, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	cred.ID = models.UUID(uuid.New())
+	now := time.Now().Unix()
+	cred.CreatedAt = now
+	cred.UpdatedAt = now
+
+	_, err := r.db.Exec(query,
+		cred.ID, cred.Endpoint, cred.BucketName, cred.Region,
+		cred.AccessKeyEncrypted, cred.SecretKeyEncrypted,
+		cred.IsEnabled, cred.CreatedAt, cred.UpdatedAt,
+	)
+
+	return err
+}
+
+// DeleteSyncCredential deletes a sync credential by ID.
+func (r *Repository) DeleteSyncCredential(id string) error {
+	query := `DELETE FROM sync_credentials WHERE id = ?`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+// DisableAllSyncCredentials disables all sync credentials (used when setting a new one).
+func (r *Repository) DisableAllSyncCredentials() error {
+	query := `UPDATE sync_credentials SET is_enabled = 0 WHERE is_enabled = 1`
+	_, err := r.db.Exec(query)
+	return err
+}
