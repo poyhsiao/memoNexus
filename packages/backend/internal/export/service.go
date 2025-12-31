@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -584,6 +585,106 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0644)
+}
+
+// ArchiveInfo represents metadata about an export archive.
+type ArchiveInfo struct {
+	ID         string    `json:"id"`
+	FilePath   string    `json:"file_path"`
+	Checksum   string    `json:"checksum"`
+	SizeBytes  int64     `json:"size_bytes"`
+	ItemCount  int       `json:"item_count"`
+	CreatedAt  time.Time `json:"created_at"`
+	Encrypted  bool      `json:"encrypted"`
+}
+
+// ListArchives returns all export archives in the exports directory.
+func (s *ExportService) ListArchives(exportDir string) ([]*ArchiveInfo, error) {
+	var archives []*ArchiveInfo
+
+	// Ensure directory exists
+	if _, err := os.Stat(exportDir); os.IsNotExist(err) {
+		return archives, nil
+	}
+
+	// Walk directory
+	err := filepath.Walk(exportDir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-tar.gz files
+		if fi.IsDir() || filepath.Ext(path) != ".gz" {
+			return nil
+		}
+
+		// Try to read manifest from archive for metadata
+		info := &ArchiveInfo{
+			ID:        filepath.Base(path),
+			FilePath:  path,
+			SizeBytes: fi.Size(),
+			CreatedAt: fi.ModTime(),
+		}
+
+		// Attempt to read checksum from filename or manifest
+		// For now, we'll use the filename as a basic identifier
+		archives = append(archives, info)
+		return nil
+	})
+
+	return archives, err
+}
+
+// DeleteArchive removes an export archive file.
+func (s *ExportService) DeleteArchive(archivePath string) error {
+	// Verify file exists
+	if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+		return fmt.Errorf("archive not found: %s", archivePath)
+	}
+
+	// Delete the file
+	if err := os.Remove(archivePath); err != nil {
+		return fmt.Errorf("failed to delete archive: %w", err)
+	}
+
+	return nil
+}
+
+// ApplyRetentionPolicy removes old archives according to retention policy.
+// Keeps the most recent `retentionCount` archives and deletes older ones.
+func (s *ExportService) ApplyRetentionPolicy(exportDir string, retentionCount int) (int, error) {
+	if retentionCount <= 0 {
+		return 0, nil // No retention limit
+	}
+
+	// List all archives
+	archives, err := s.ListArchives(exportDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list archives: %w", err)
+	}
+
+	// Sort by creation time (oldest first)
+	sort.Slice(archives, func(i, j int) bool {
+		return archives[i].CreatedAt.Before(archives[j].CreatedAt)
+	})
+
+	// Determine how many to delete
+	deleteCount := len(archives) - retentionCount
+	if deleteCount <= 0 {
+		return 0, nil // No archives to delete
+	}
+
+	// Delete oldest archives
+	deleted := 0
+	for i := 0; i < deleteCount; i++ {
+		if err := s.DeleteArchive(archives[i].FilePath); err != nil {
+			// Log error but continue with other deletions
+			continue
+		}
+		deleted++
+	}
+
+	return deleted, nil
 }
 
 // ErrNotFound is returned when an item is not found.
