@@ -275,17 +275,14 @@ func buildStopWords() map[string]bool {
 	english := []string{
 		"a", "an", "and", "are", "as", "at", "be", "by", "for",
 		"from", "has", "he", "in", "is", "it", "its", "of", "on",
-		"that", "the", "to", "was", "will", "with", "the", "this",
+		"that", "the", "to", "was", "will", "with", "this",
 		"but", "they", "have", "had", "what", "when", "where", "who",
 		"which", "why", "how", "all", "each", "every", "both", "few",
 		"more", "most", "other", "some", "such", "no", "nor", "not",
 		"only", "own", "same", "so", "than", "too", "very", "just",
-		"can", "about", "into", "through", "during", "before", "after",
-		"above", "below", "between", "under", "again", "further", "then",
-		"once", "here", "there", "when", "where", "why", "how", "all",
-		"any", "both", "each", "few", "more", "most", "other", "some",
-		"such", "no", "nor", "not", "only", "own", "same", "so", "than",
-		"too", "very", "get", "got", "getting", "got", "gotten",
+		"can", "could", "about", "into", "through", "during", "before", "after",
+		"above", "below", "between", "under", "over", "again", "further", "then",
+		"once", "here", "there", "any", "get", "got", "getting", "stop",
 	}
 
 	// Common Chinese stop words (single characters and common particles)

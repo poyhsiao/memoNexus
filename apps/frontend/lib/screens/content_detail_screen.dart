@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/content_item.dart';
 import '../providers/content_provider.dart';
 import '../widgets/tag_picker.dart';
+import '../widgets/summary_view.dart';
+import '../widgets/keyword_suggestions.dart';
 
 class ContentDetailScreen extends ConsumerStatefulWidget {
   final String itemId;
@@ -23,6 +25,10 @@ class ContentDetailScreen extends ConsumerStatefulWidget {
 class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
   bool _isEditingTags = false;
   List<String> _editedTags = [];
+
+  // Summary and keyword analysis state
+  List<String> _extractedKeywords = [];
+  bool _isExtractingKeywords = false;
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +93,14 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
 
           // Tags section
           _buildTagsSection(context, item),
+          const SizedBox(height: 24),
+
+          // Summary section (T142)
+          _buildSummarySection(context, item),
+          const SizedBox(height: 24),
+
+          // Keyword suggestions section (T143)
+          _buildKeywordSuggestionsSection(context, item),
           const SizedBox(height: 24),
 
           // Content
@@ -206,6 +220,58 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildSummarySection(BuildContext context, ContentItem item) {
+    // If summary exists, display it
+    if (item.summary != null && item.summary!.isNotEmpty) {
+      return SummaryView(
+        summary: item.summary!,
+        method: 'tfidf', // Default method for stored summaries
+        aiUsed: false,
+      );
+    }
+
+    // Show empty state with option to generate
+    return SummaryEmptyView(
+      onGenerate: () => _generateSummary(context, item),
+    );
+  }
+
+  Widget _buildKeywordSuggestionsSection(BuildContext context, ContentItem item) {
+    if (_extractedKeywords.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          KeywordSuggestions(
+            keywords: _extractedKeywords,
+            onKeywordSelected: (keyword) => _addKeywordAsTag(context, item, keyword),
+            onRefresh: () => _extractKeywords(context, item),
+            method: 'tfidf',
+            isLoading: _isExtractingKeywords,
+          ),
+          if (_editedTags.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            SelectedKeywords(
+              keywords: _editedTags,
+              onRemove: (keyword) {
+                setState(() {
+                  _editedTags.remove(keyword);
+                });
+              },
+            ),
+          ],
+        ],
+      );
+    }
+
+    return KeywordSuggestions(
+      keywords: [],
+      onKeywordSelected: (keyword) => _addKeywordAsTag(context, item, keyword),
+      onRefresh: () => _extractKeywords(context, item),
+      isLoading: _isExtractingKeywords,
+      method: 'tfidf',
     );
   }
 
@@ -339,6 +405,99 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
         );
       }
     }
+  }
+
+  // =====================================================
+  // AI Analysis Methods (T142-T143)
+  // =====================================================
+
+  Future<void> _generateSummary(BuildContext context, ContentItem item) async {
+    try {
+      final api = ref.read(apiClientProvider);
+      final result = await api.generateSummary(item.id);
+
+      if (mounted) {
+        // Refresh the item to get the updated summary
+        ref.refresh(contentItemProvider(widget.itemId));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['method'] == 'ai'
+                ? 'AI summary generated'
+                : 'Summary created using ${result['method']}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate summary: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _extractKeywords(BuildContext context, ContentItem item) async {
+    setState(() {
+      _isExtractingKeywords = true;
+    });
+
+    try {
+      final api = ref.read(apiClientProvider);
+      final keywords = await api.extractKeywords(item.id);
+
+      if (mounted) {
+        setState(() {
+          _extractedKeywords = keywords;
+          _isExtractingKeywords = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isExtractingKeywords = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to extract keywords: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _addKeywordAsTag(BuildContext context, ContentItem item, String keyword) {
+    // Check if keyword already exists in tags
+    if (item.tags.contains(keyword)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$keyword" is already a tag'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+
+    // Add to edited tags
+    setState(() {
+      if (!_editedTags.contains(keyword)) {
+        _editedTags.add(keyword);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"$keyword" added to tags'),
+        action: SnackBarAction(
+          label: 'Save',
+          onPressed: () => _saveTags(item),
+        ),
+      ),
+    );
   }
 
   void _showDeleteConfirmation(BuildContext context, ContentItem item) {

@@ -256,9 +256,9 @@ Based on plan.md structure:
 
 ### Unit Tests for User Story 3
 
-- [ ] T127 [P] [US3] Unit test for TF-IDF keyword extraction in packages/backend/internal/analysis/tfidf/tfidf_test.go
-- [ ] T128 [P] [US3] Unit test for TextRank algorithm in packages/backend/internal/analysis/textrank/textrank_test.go
-- [ ] T129 [P] [US3] Unit test for AI client mocking (OpenAI, Claude, Ollama) in packages/backend/internal/analysis/ai/client_test.go
+- [X] T127 [P] [US3] Unit test for TF-IDF keyword extraction in packages/backend/internal/analysis/tfidf_test.go
+- [X] T128 [P] [US3] Unit test for TextRank algorithm in packages/backend/internal/analysis/textrank/extractor_test.go
+- [X] T129 [P] [US3] Unit test for AI client mocking (OpenAI, Claude, Ollama) in packages/backend/internal/analysis/ai_test.go
 
 ### Implementation for User Story 3
 
@@ -284,16 +284,16 @@ Based on plan.md structure:
 
 #### Flutter UI (Analysis)
 
-- [ ] T141 [P] [US3] Create AI configuration screen in apps/frontend/lib/screens/ai_config_screen.dart (provider selection, API endpoint, key input)
-- [ ] T142 [P] [US3] Create summary view widget in apps/frontend/lib/widgets/summary_view.dart (display AI/TF-IDF summaries)
-- [ ] T143 [P] [US3] Create keyword suggestions widget in apps/frontend/lib/widgets/keyword_suggestions.dart (auto-generated tags)
-- [ ] T144 [US3] Create AIConfig Riverpod provider in apps/frontend/lib/providers/ai_config_provider.dart
+- [X] T141 [P] [US3] Create AI configuration screen in apps/frontend/lib/screens/ai_config_screen.dart (provider selection, API endpoint, key input)
+- [X] T142 [P] [US3] Create summary view widget in apps/frontend/lib/widgets/summary_view.dart (display AI/TF-IDF summaries)
+- [X] T143 [P] [US3] Create keyword suggestions widget in apps/frontend/lib/widgets/keyword_suggestions.dart (auto-generated tags)
+- [X] T144 [US3] Create AIConfig Riverpod provider in apps/frontend/lib/providers/ai_config_provider.dart
 
 #### WebSocket Events (Analysis Progress)
 
-- [ ] T145 [US3] Implement analysis.started WebSocket event in packages/backend/cmd/desktop/websocket.go (notify when analysis starts)
-- [ ] T146 [US3] Implement analysis.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (notify with result)
-- [ ] T147 [US3] Implement analysis.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (graceful degradation notification)
+- [X] T145 [US3] Implement analysis.started WebSocket event in packages/backend/cmd/desktop/websocket.go (notify when analysis starts)
+- [X] T146 [US3] Implement analysis.completed WebSocket event in packages/backend/cmd/desktop/websocket.go (notify with result)
+- [X] T147 [US3] Implement analysis.failed WebSocket event in packages/backend/cmd/desktop/websocket.go (graceful degradation notification)
 
 **Checkpoint**: At this point, User Stories 1, 2, AND 3 should all work independently. Users have automatic keyword extraction (offline) and optional AI summaries.
 

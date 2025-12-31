@@ -54,17 +54,19 @@ func main() {
 	// Create repository
 	repository := db.NewRepository(database.DB)
 
-	// Create analysis service
+	// Create WebSocket hub
+	wsHub := NewWSHub()
+
+	// Create analysis service with WebSocket support (T145-T147)
 	analysisService := services.NewAnalysisService(services.DefaultAnalysisConfig())
+	analysisService.SetWebSocketBroadcaster(wsHub)
 
 	// Create handlers
 	contentHandler := handlers.NewContentHandler(repository)
 	tagHandler := handlers.NewTagHandler(repository)
 	searchHandler := handlers.NewSearchHandler(repository)
 	aiHandler := handlers.NewAIHandler(repository, analysisService, os.Getenv("MACHINE_ID"))
-
-	// Create WebSocket hub
-	wsHub := NewWSHub()
+	aiHandler.SetWebSocketHub(wsHub) // T145-T147: Enable WebSocket events
 
 	// Setup routes
 	mux := http.NewServeMux()

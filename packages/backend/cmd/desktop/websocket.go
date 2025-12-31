@@ -45,6 +45,17 @@ type WSEnvelope struct {
 	Timestamp int64                  `json:"timestamp"`
 }
 
+// =====================================================
+// WebSocket Event Types
+// =====================================================
+
+const (
+	// Analysis events (T145-T147)
+	EventAnalysisStarted  = "analysis.started"
+	EventAnalysisCompleted = "analysis.completed"
+	EventAnalysisFailed    = "analysis.failed"
+)
+
 // NewWSHub creates a new WebSocket hub.
 func NewWSHub() *WSHub {
 	hub := &WSHub{
@@ -107,6 +118,35 @@ func (h *WSHub) Broadcast(messageType string, data map[string]interface{}) {
 	}
 
 	h.broadcast <- bytes
+}
+
+// =====================================================
+// Analysis Event Broadcasters (T145-T147)
+// =====================================================
+
+// BroadcastAnalysisStarted notifies clients that content analysis has started.
+func (h *WSHub) BroadcastAnalysisStarted(contentID string, operation string) {
+	h.Broadcast(EventAnalysisStarted, map[string]interface{}{
+		"content_id": contentID,
+		"operation":  operation, // "summary" or "keywords"
+	})
+}
+
+// BroadcastAnalysisCompleted notifies clients that analysis completed successfully.
+func (h *WSHub) BroadcastAnalysisCompleted(contentID string, result map[string]interface{}) {
+	h.Broadcast(EventAnalysisCompleted, map[string]interface{}{
+		"content_id": contentID,
+		"result":     result,
+	})
+}
+
+// BroadcastAnalysisFailed notifies clients that analysis failed with graceful degradation.
+func (h *WSHub) BroadcastAnalysisFailed(contentID string, errMsg string, fallbackMethod string) {
+	h.Broadcast(EventAnalysisFailed, map[string]interface{}{
+		"content_id":      contentID,
+		"error":           errMsg,
+		"fallback_method": fallbackMethod, // "tfidf" or "textrank"
+	})
 }
 
 // readPump pumps messages from the WebSocket connection.

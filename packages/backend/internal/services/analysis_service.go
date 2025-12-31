@@ -4,6 +4,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -13,6 +14,14 @@ import (
 	"github.com/kimhsiao/memonexus/backend/internal/analysis/textrank"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
+
+// WebSocketBroadcaster is an interface for broadcasting WebSocket events.
+// This interface avoids circular dependencies with the WebSocket package.
+type WebSocketBroadcaster interface {
+	BroadcastAnalysisStarted(contentID string, operation string)
+	BroadcastAnalysisCompleted(contentID string, result map[string]interface{})
+	BroadcastAnalysisFailed(contentID string, errMsg string, fallbackMethod string)
+}
 
 // AnalysisService coordinates content analysis using both TF-IDF (offline)
 // and AI (optional) methods.
@@ -29,6 +38,9 @@ type AnalysisService struct {
 
 	// Configuration
 	config *AnalysisConfig
+
+	// WebSocket broadcaster for real-time notifications (T145-T147)
+	wsBroadcaster WebSocketBroadcaster
 
 	// Event callbacks for WebSocket notifications
 	onAnalysisStarted func(contentID string)
@@ -86,6 +98,39 @@ func NewAnalysisService(config *AnalysisConfig) *AnalysisService {
 		textrankExtractor: textrank.NewTextRankExtractor(),
 		config:           config,
 	}
+}
+
+// SetWebSocketBroadcaster sets the WebSocket broadcaster for real-time notifications (T145-T147).
+func (s *AnalysisService) SetWebSocketBroadcaster(ws WebSocketBroadcaster) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.wsBroadcaster = ws
+
+	// Set up event callbacks to broadcast WebSocket events
+	s.onAnalysisStarted = func(contentID string) {
+		if s.wsBroadcaster != nil {
+			s.wsBroadcaster.BroadcastAnalysisStarted(contentID, "analyze")
+		}
+	}
+
+	s.onAnalysisCompleted = func(contentID string, result *AnalysisResult) {
+		if s.wsBroadcaster != nil {
+			resultMap, _ := json.Marshal(result)
+			var data map[string]interface{}
+			json.Unmarshal(resultMap, &data)
+			s.wsBroadcaster.BroadcastAnalysisCompleted(contentID, data)
+		}
+	}
+
+	s.onAnalysisFailed = func(contentID string, err error) {
+		if s.wsBroadcaster != nil {
+			// Determine fallback method
+			fallback := "tfidf"
+			s.wsBroadcaster.BroadcastAnalysisFailed(contentID, err.Error(), fallback)
+		}
+	}
+
+	log.Printf("[AnalysisService] WebSocket broadcaster configured")
 }
 
 // ConfigureAI sets up AI analysis with the given configuration.
