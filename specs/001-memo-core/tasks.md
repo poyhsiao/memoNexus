@@ -443,11 +443,11 @@ Based on plan.md structure:
 ### Observability (FR-048 to FR-055)
 
 - [X] T209 [P] Implement local log file writer in packages/backend/internal/logging/ (JSON structured logs - uses existing logger.go)
-- [ ] T210 [P] Add error logging (timestamp, error code, message) in packages/backend/internal/services/ (all services)
-- [ ] T211 [P] Add critical operations logging (export, sync) in packages/backend/internal/services/ (start/complete/success/failure)
-- [ ] T212 [P] Add concurrent edit conflict logging in packages/backend/internal/sync/conflict/resolver.go (item UUID, both timestamps)
+- [X] T210 [P] Add error logging (timestamp, error code, message) in packages/backend/internal/services/ (all services)
+- [X] T211 [P] Add critical operations logging (export, sync) in packages/backend/internal/services/ (start/complete/success/failure)
+- [X] T212 [P] Add concurrent edit conflict logging in packages/backend/internal/sync/conflict/resolver.go (item UUID, both timestamps)
 - [X] T213 [P] Implement "View Logs" functionality in apps/frontend/lib/screens/logs_screen.dart (open log file location)
-- [ ] T214 Verify no sensitive data in logs (passwords, API keys, user content) per FR-050
+- [X] T214 Verify no sensitive data in logs (passwords, API keys, user content) per FR-050
 
 ### Graceful Degradation (FR-056 to FR-063)
 

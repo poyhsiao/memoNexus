@@ -5,11 +5,11 @@ package queue
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
@@ -34,16 +34,16 @@ const (
 
 // QueueItem represents a sync operation in the queue.
 type QueueItem struct {
-	ID           string
-	Operation    Operation
-	Payload      map[string]interface{}
-	RetryCount   int
-	MaxRetries   int
-	NextRetryAt  int64
-	Status       QueueStatus
-	CreatedAt    int64
-	UpdatedAt    int64
-	LastError    string
+	ID          string
+	Operation   Operation
+	Payload     map[string]interface{}
+	RetryCount  int
+	MaxRetries  int
+	NextRetryAt int64
+	Status      QueueStatus
+	CreatedAt   int64
+	UpdatedAt   int64
+	LastError   string
 }
 
 // SyncQueue manages pending sync operations with retry logic.
@@ -51,7 +51,7 @@ type SyncQueue struct {
 	items    map[string]*QueueItem
 	mu       sync.RWMutex
 	maxSize  int
-	notEmpty  *sync.Cond
+	notEmpty *sync.Cond
 }
 
 // NewSyncQueue creates a new SyncQueue.
@@ -93,7 +93,11 @@ func (q *SyncQueue) Enqueue(operation Operation, payload map[string]interface{})
 	// Signal that queue is not empty
 	q.notEmpty.Signal()
 
-	log.Printf("[SyncQueue] Enqueued %s operation %s", item.Operation, item.ID)
+	logging.Info("Enqueued sync operation",
+		map[string]interface{}{
+			"operation": item.Operation,
+			"item_id":   item.ID,
+		})
 
 	return item, nil
 }
@@ -124,7 +128,11 @@ func (q *SyncQueue) Dequeue() *QueueItem {
 	readyItem.Status = QueueStatusInProgress
 	readyItem.UpdatedAt = now
 
-	log.Printf("[SyncQueue] Dequeued %s operation %s", readyItem.Operation, readyItem.ID)
+	logging.Info("Dequeued sync operation",
+		map[string]interface{}{
+			"operation": readyItem.Operation,
+			"item_id":   readyItem.ID,
+		})
 
 	return readyItem
 }
@@ -203,7 +211,11 @@ func (q *SyncQueue) Complete(id string) error {
 	// Remove from queue
 	delete(q.items, id)
 
-	log.Printf("[SyncQueue] Completed %s operation %s", item.Operation, id)
+	logging.Info("Completed sync operation",
+		map[string]interface{}{
+			"operation": item.Operation,
+			"item_id":   id,
+		})
 
 	return nil
 }
@@ -225,7 +237,13 @@ func (q *SyncQueue) Failed(id string, err error) error {
 	if item.RetryCount >= item.MaxRetries {
 		// Max retries reached, mark as failed
 		item.Status = QueueStatusFailed
-		log.Printf("[SyncQueue] %s operation %s failed permanently: %v", item.Operation, id, err)
+		logging.Error("Sync operation failed permanently", err,
+			map[string]interface{}{
+				"operation":   item.Operation,
+				"item_id":     id,
+				"retry_count": item.RetryCount,
+				"max_retries": item.MaxRetries,
+			})
 		return fmt.Errorf("max retries (%d) reached: %w", item.MaxRetries, err)
 	}
 
@@ -234,8 +252,15 @@ func (q *SyncQueue) Failed(id string, err error) error {
 	item.NextRetryAt = time.Now().Unix() + int64(backoffSeconds)
 	item.Status = QueueStatusPending
 
-	log.Printf("[SyncQueue] %s operation %s failed, retry %d/%d in %d seconds: %v",
-		item.Operation, id, item.RetryCount, item.MaxRetries, backoffSeconds, err)
+	logging.Warn("Sync operation failed, scheduling retry",
+		map[string]interface{}{
+			"operation":   item.Operation,
+			"item_id":     id,
+			"retry_count": item.RetryCount,
+			"max_retries": item.MaxRetries,
+			"backoff_sec": backoffSeconds,
+			"error":       err.Error(),
+		})
 
 	// Signal that queue has pending items
 	q.notEmpty.Signal()
@@ -247,7 +272,7 @@ func (q *SyncQueue) Failed(id string, err error) error {
 // Formula: 2^retry_count * 60, capped at 3600 seconds (1 hour).
 func calculateBackoff(retryCount int) int64 {
 	backoff := int64(1) << uint(retryCount) // 2^retry_count
-	backoff = backoff * 60                   // Convert to seconds
+	backoff = backoff * 60                  // Convert to seconds
 
 	// Cap at 1 hour
 	maxBackoff := int64(3600)
@@ -319,7 +344,7 @@ func (q *SyncQueue) Clear() {
 
 	q.items = make(map[string]*QueueItem)
 
-	log.Printf("[SyncQueue] Queue cleared")
+	logging.Info("Sync queue cleared", nil)
 }
 
 // Remove removes a specific item from the queue.
@@ -356,7 +381,8 @@ func (q *SyncQueue) RetryAll() int {
 
 	if count > 0 {
 		q.notEmpty.Signal()
-		log.Printf("[SyncQueue] Reset %d failed items for retry", count)
+		logging.Info("Reset failed items for retry",
+			map[string]interface{}{"count": count})
 	}
 
 	return count
@@ -368,11 +394,11 @@ func (q *SyncQueue) GetStats() map[string]int {
 	defer q.mu.RUnlock()
 
 	stats := map[string]int{
-		"total":     0,
-		"pending":   0,
+		"total":       0,
+		"pending":     0,
 		"in_progress": 0,
-		"failed":    0,
-		"completed": 0,
+		"failed":      0,
+		"completed":   0,
 	}
 
 	for _, item := range q.items {

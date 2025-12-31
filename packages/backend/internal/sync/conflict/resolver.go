@@ -5,6 +5,7 @@ package conflict
 import (
 	"time"
 
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
@@ -35,18 +36,19 @@ type Conflict struct {
 	RemoteItem      *models.ContentItem
 	LocalTimestamp  int64
 	RemoteTimestamp int64
- DetectedAt      int64
+	DetectedAt      int64
 }
 
 // ResolveResult represents the outcome of conflict resolution.
 type ResolveResult struct {
-	WinningItem   *models.ContentItem // The item that should be kept
-	LosingItem    *models.ContentItem // The item that was overwritten
-	Strategy      ResolutionStrategy
-	ConflictLog   *models.ConflictLog // Log entry for awareness
+	WinningItem *models.ContentItem // The item that should be kept
+	LosingItem  *models.ContentItem // The item that was overwritten
+	Strategy    ResolutionStrategy
+	ConflictLog *models.ConflictLog // Log entry for awareness
 }
 
 // Resolve resolves a conflict using the configured strategy.
+// T212: Concurrent edit conflict logging with item UUID and both timestamps.
 func (r *Resolver) Resolve(conflict *Conflict) (*ResolveResult, error) {
 	if conflict.LocalItem == nil || conflict.RemoteItem == nil {
 		return nil, ErrInvalidConflict
@@ -56,6 +58,14 @@ func (r *Resolver) Resolve(conflict *Conflict) (*ResolveResult, error) {
 	if conflict.LocalItem.ID != conflict.RemoteItem.ID {
 		return nil, ErrItemIDMismatch
 	}
+
+	logging.Info("Resolving conflict",
+		map[string]interface{}{
+			"item_id":          conflict.LocalItem.ID,
+			"local_timestamp":  conflict.LocalItem.UpdatedAt,
+			"remote_timestamp": conflict.RemoteItem.UpdatedAt,
+			"strategy":         r.strategy,
+		})
 
 	switch r.strategy {
 	case ResolutionStrategyLastWriteWins:
@@ -69,6 +79,7 @@ func (r *Resolver) Resolve(conflict *Conflict) (*ResolveResult, error) {
 
 // resolveLastWriteWins implements "last write wins" strategy.
 // The item with the newer UpdatedAt timestamp wins.
+// T212: Conflict resolution logging.
 func (r *Resolver) resolveLastWriteWins(conflict *Conflict) (*ResolveResult, error) {
 	var winningItem, losingItem *models.ContentItem
 	var resolution string
@@ -94,6 +105,15 @@ func (r *Resolver) resolveLastWriteWins(conflict *Conflict) (*ResolveResult, err
 		DetectedAt:      time.Now().Unix(),
 	}
 
+	logging.Info("Conflict resolved using last-write-wins",
+		map[string]interface{}{
+			"item_id":          winningItem.ID,
+			"local_timestamp":  conflict.LocalItem.UpdatedAt,
+			"remote_timestamp": conflict.RemoteItem.UpdatedAt,
+			"resolution":       resolution,
+			"winner":           resolution,
+		})
+
 	return &ResolveResult{
 		WinningItem: winningItem,
 		LosingItem:  losingItem,
@@ -104,6 +124,7 @@ func (r *Resolver) resolveLastWriteWins(conflict *Conflict) (*ResolveResult, err
 
 // resolveManual returns both items for manual resolution.
 // In a real implementation, this would queue the conflict for user review.
+// T212: Manual conflict resolution logging.
 func (r *Resolver) resolveManual(conflict *Conflict) (*ResolveResult, error) {
 	// For manual resolution, we keep the local version and mark for review
 	conflictLog := &models.ConflictLog{
@@ -113,6 +134,14 @@ func (r *Resolver) resolveManual(conflict *Conflict) (*ResolveResult, error) {
 		Resolution:      "manual_review_required",
 		DetectedAt:      time.Now().Unix(),
 	}
+
+	logging.Warn("Conflict queued for manual review",
+		map[string]interface{}{
+			"item_id":          conflict.LocalItem.ID,
+			"local_timestamp":  conflict.LocalItem.UpdatedAt,
+			"remote_timestamp": conflict.RemoteItem.UpdatedAt,
+			"resolution":       "manual_review_required",
+		})
 
 	return &ResolveResult{
 		WinningItem: conflict.LocalItem,
@@ -124,6 +153,7 @@ func (r *Resolver) resolveManual(conflict *Conflict) (*ResolveResult, error) {
 
 // DetectConflict detects if there's a conflict between local and remote items.
 // A conflict exists when both items have been modified since last sync.
+// T212: Conflict detection logging.
 func (r *Resolver) DetectConflict(localItem, remoteItem *models.ContentItem) (*Conflict, bool) {
 	// No conflict if one item doesn't exist
 	if localItem == nil || remoteItem == nil {
@@ -149,6 +179,15 @@ func (r *Resolver) DetectConflict(localItem, remoteItem *models.ContentItem) (*C
 		RemoteTimestamp: remoteItem.UpdatedAt,
 		DetectedAt:      time.Now().Unix(),
 	}
+
+	logging.Warn("Concurrent edit conflict detected",
+		map[string]interface{}{
+			"item_id":          localItem.ID,
+			"local_timestamp":  localItem.UpdatedAt,
+			"remote_timestamp": remoteItem.UpdatedAt,
+			"local_version":    localItem.Version,
+			"remote_version":   remoteItem.Version,
+		})
 
 	return conflict, true
 }
@@ -194,10 +233,10 @@ func (r *Resolver) MergeItems(localItem, remoteItem *models.ContentItem) (*model
 
 // Errors
 var (
-	ErrInvalidConflict     = &ConflictError{Message: "invalid conflict: both items must be non-nil"}
-	ErrItemIDMismatch      = &ConflictError{Message: "item ID mismatch"}
-	ErrMergeNotSupported   = &ConflictError{Message: "merge not supported"}
-	ErrConflictUnresolved  = &ConflictError{Message: "conflict could not be resolved"}
+	ErrInvalidConflict    = &ConflictError{Message: "invalid conflict: both items must be non-nil"}
+	ErrItemIDMismatch     = &ConflictError{Message: "item ID mismatch"}
+	ErrMergeNotSupported  = &ConflictError{Message: "merge not supported"}
+	ErrConflictUnresolved = &ConflictError{Message: "conflict could not be resolved"}
 )
 
 // ConflictError represents a conflict resolution error.

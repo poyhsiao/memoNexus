@@ -4,10 +4,11 @@ package scheduler
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	syncpkg "github.com/kimhsiao/memonexus/backend/internal/sync"
 	"github.com/kimhsiao/memonexus/backend/internal/sync/queue"
 )
@@ -50,12 +51,12 @@ func NewScheduler(engine *syncpkg.SyncEngine, queue *queue.SyncQueue, config *Sc
 	}
 
 	return &Scheduler{
-		engine:         engine,
-		queue:          queue,
-		syncInterval:   config.SyncInterval,
-		queueInterval:  config.QueueInterval,
-		stopCh:         make(chan struct{}),
-		isOnline:       true, // Assume online initially
+		engine:        engine,
+		queue:         queue,
+		syncInterval:  config.SyncInterval,
+		queueInterval: config.QueueInterval,
+		stopCh:        make(chan struct{}),
+		isOnline:      true, // Assume online initially
 	}
 }
 
@@ -77,7 +78,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// Start queue processor goroutine
 	go s.queueProcessorLoop(ctx)
 
-	log.Println("[Scheduler] Background sync scheduler started")
+	logging.Info("Background sync scheduler started", nil)
 }
 
 // Stop stops the background sync scheduler gracefully.
@@ -96,7 +97,7 @@ func (s *Scheduler) Stop() {
 	// Wait for goroutines to finish
 	s.wg.Wait()
 
-	log.Println("[Scheduler] Background sync scheduler stopped")
+	logging.Info("Background sync scheduler stopped", nil)
 }
 
 // SetOnlineStatus changes the online status of the scheduler.
@@ -110,7 +111,11 @@ func (s *Scheduler) SetOnlineStatus(isOnline bool) {
 	s.isOnline = isOnline
 
 	if wasOnline != isOnline {
-		log.Printf("[Scheduler] Online status changed: %v -> %v", wasOnline, isOnline)
+		logging.Info("Online status changed",
+			map[string]interface{}{
+				"was_online": wasOnline,
+				"is_online":  isOnline,
+			})
 	}
 }
 
@@ -139,7 +144,7 @@ func (s *Scheduler) periodicSyncLoop(ctx context.Context) {
 			s.mu.RUnlock()
 
 			if isSyncing {
-				log.Println("[Scheduler] Sync already in progress, skipping")
+				logging.Debug("Sync already in progress, skipping", nil)
 				continue
 			}
 
@@ -183,7 +188,7 @@ func (s *Scheduler) runSync(ctx context.Context) {
 		s.mu.Unlock()
 	}()
 
-	log.Println("[Scheduler] Starting periodic sync...")
+	logging.Info("Starting periodic sync", nil)
 
 	// Create sync context with timeout
 	syncCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -192,7 +197,8 @@ func (s *Scheduler) runSync(ctx context.Context) {
 	result, err := s.engine.Sync(syncCtx)
 
 	if err != nil {
-		log.Printf("[Scheduler] Periodic sync failed: %v", err)
+		logging.ErrorWithCode("Periodic sync failed", string(errors.ErrSyncFailed), err,
+			map[string]interface{}{"interval_minutes": s.syncInterval.Minutes()})
 		return
 	}
 
@@ -200,8 +206,12 @@ func (s *Scheduler) runSync(ctx context.Context) {
 	s.lastSyncTime = time.Now()
 	s.mu.Unlock()
 
-	log.Printf("[Scheduler] Periodic sync completed: uploaded=%d, downloaded=%d, conflicts=%d",
-		result.Uploaded, result.Downloaded, result.Conflicts)
+	logging.Info("Periodic sync completed",
+		map[string]interface{}{
+			"uploaded":   result.Uploaded,
+			"downloaded": result.Downloaded,
+			"conflicts":  result.Conflicts,
+		})
 }
 
 // processQueue processes pending items in the sync queue.
@@ -227,7 +237,8 @@ func (s *Scheduler) processQueue(ctx context.Context) {
 		s.mu.Unlock()
 	}()
 
-	log.Printf("[Scheduler] Processing %d pending queue items...", len(pending))
+	logging.Info("Processing pending queue items",
+		map[string]interface{}{"count": len(pending)})
 
 	processed := 0
 	for _, item := range pending {
@@ -243,12 +254,14 @@ func (s *Scheduler) processQueue(ctx context.Context) {
 			if err := s.queue.Complete(item.ID); err == nil {
 				processed++
 			} else {
-				log.Printf("[Scheduler] Failed to complete item %s: %v", item.ID, err)
+				logging.Error("Failed to complete queue item", err,
+					map[string]interface{}{"item_id": item.ID})
 			}
 		}
 	}
 
-	log.Printf("[Scheduler] Queue processing completed: %d items processed", processed)
+	logging.Info("Queue processing completed",
+		map[string]interface{}{"processed": processed})
 }
 
 // TriggerSync triggers an immediate sync operation.
@@ -268,13 +281,13 @@ func (s *Scheduler) TriggerSync(ctx context.Context) bool {
 
 // GetStatus returns the current status of the scheduler.
 type SchedulerStatus struct {
-	IsRunning      bool
-	IsOnline       bool
-	LastSyncTime   *time.Time
-	SyncInProgress bool
+	IsRunning       bool
+	IsOnline        bool
+	LastSyncTime    *time.Time
+	SyncInProgress  bool
 	QueueInProgress bool
-	PendingItems   int
-	QueueStats     map[string]int
+	PendingItems    int
+	QueueStats      map[string]int
 }
 
 func (s *Scheduler) GetStatus() SchedulerStatus {
@@ -325,8 +338,12 @@ func (s *Scheduler) SyncNow(ctx context.Context) error {
 	s.lastSyncTime = time.Now()
 	s.mu.Unlock()
 
-	log.Printf("[Scheduler] Manual sync completed: uploaded=%d, downloaded=%d, conflicts=%d",
-		result.Uploaded, result.Downloaded, result.Conflicts)
+	logging.Info("Manual sync completed",
+		map[string]interface{}{
+			"uploaded":   result.Uploaded,
+			"downloaded": result.Downloaded,
+			"conflicts":  result.Conflicts,
+		})
 
 	return nil
 }
