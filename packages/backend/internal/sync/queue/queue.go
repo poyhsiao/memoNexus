@@ -47,18 +47,26 @@ type QueueItem struct {
 }
 
 // SyncQueue manages pending sync operations with retry logic.
+// T218: Sync queue for offline operations - queue when network unavailable, process when connection resumes.
 type SyncQueue struct {
-	items    map[string]*QueueItem
-	mu       sync.RWMutex
-	maxSize  int
-	notEmpty *sync.Cond
+	items       map[string]*QueueItem
+	mu          sync.RWMutex
+	maxSize     int
+	notEmpty    *sync.Cond
+	isOnline    bool
+	onlineCh    chan bool
+	stopCh      chan struct{}
 }
 
 // NewSyncQueue creates a new SyncQueue.
+// T218: Assumes online initially, starts network monitor.
 func NewSyncQueue(maxSize int) *SyncQueue {
 	q := &SyncQueue{
-		items:   make(map[string]*QueueItem),
-		maxSize: maxSize,
+		items:    make(map[string]*QueueItem),
+		maxSize:  maxSize,
+		isOnline: true, // Assume online initially
+		onlineCh: make(chan bool, 1),
+		stopCh:   make(chan struct{}),
 	}
 	q.notEmpty = sync.NewCond(&q.mu)
 	return q
@@ -416,6 +424,121 @@ func (q *SyncQueue) GetStats() map[string]int {
 	}
 
 	return stats
+}
+
+// =====================================================
+// Network Status Management (T218)
+// =====================================================
+
+// SetOnlineStatus changes the online status of the queue.
+// When coming back online, triggers processing of pending items.
+// T218: Process queue when connection resumes.
+func (q *SyncQueue) SetOnlineStatus(isOnline bool) {
+	q.mu.Lock()
+	wasOnline := q.isOnline
+	q.isOnline = isOnline
+	q.mu.Unlock()
+
+	// Log status change
+	logging.Info("Sync queue network status changed",
+		map[string]interface{}{
+			"was_online": wasOnline,
+			"is_online":  isOnline,
+		})
+
+	// If coming back online and we have pending items, notify
+	if !wasOnline && isOnline {
+		q.mu.Lock()
+		hasPending := len(q.GetPending()) > 0
+		if hasPending {
+			q.notEmpty.Signal()
+		}
+		q.mu.Unlock()
+
+		logging.Info("Network restored, pending queue items ready for processing",
+			map[string]interface{}{
+				"pending_count": len(q.GetPending()),
+			})
+	}
+}
+
+// IsOnline returns whether the queue is in online mode.
+func (q *SyncQueue) IsOnline() bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.isOnline
+}
+
+// ProcessOnReconnect processes pending items when connection is restored.
+// T218: Called when network becomes available to process queued operations.
+func (q *SyncQueue) ProcessOnReconnect() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	now := time.Now().Unix()
+	count := 0
+
+	for _, item := range q.items {
+		// Reset items that were waiting for network to be immediately ready
+		if item.Status == QueueStatusPending && item.NextRetryAt > now {
+			item.NextRetryAt = now
+			item.UpdatedAt = now
+			count++
+		}
+	}
+
+	if count > 0 {
+		q.notEmpty.Signal()
+		logging.Info("Reset pending items for immediate processing on reconnect",
+			map[string]interface{}{
+				"count": count,
+			})
+	}
+
+	return count
+}
+
+// QueueWhenOffline adds an operation to the queue with offline handling.
+// If offline, immediately queues without attempting sync.
+// If online, can optionally attempt immediate sync (not implemented here).
+// T218: Queue operations when network unavailable.
+func (q *SyncQueue) QueueWhenOffline(operation Operation, payload map[string]interface{}) (*QueueItem, error) {
+	q.mu.Lock()
+	isOnline := q.isOnline
+	q.mu.Unlock()
+
+	// Always enqueue - the scheduler will handle processing
+	item, err := q.Enqueue(operation, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isOnline {
+		logging.Info("Queued operation for offline processing",
+			map[string]interface{}{
+				"operation": item.Operation,
+				"item_id":   item.ID,
+			})
+	}
+
+	return item, nil
+}
+
+// Stop stops the queue and releases resources.
+func (q *SyncQueue) Stop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	select {
+	case <-q.stopCh:
+		// Already stopped
+		return
+	default:
+		close(q.stopCh)
+		q.notEmpty.Broadcast()
+	}
+
+	logging.Info("Sync queue stopped", nil)
 }
 
 // ToModel converts a QueueItem to a SyncQueue model for database storage.

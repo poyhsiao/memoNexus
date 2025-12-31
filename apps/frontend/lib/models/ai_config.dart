@@ -8,7 +8,7 @@ enum AIProvider {
 }
 
 // UUID helper
-final _uuid = Uuid();
+const _uuid = Uuid();
 
 class AIConfig {
   final String id;

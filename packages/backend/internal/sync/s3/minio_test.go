@@ -9,51 +9,51 @@ import (
 // TestNewMinIOClient tests creating a MinIO client.
 func TestNewMinIOClient(t *testing.T) {
 	tests := []struct {
-		name     string
-		config   *MinIOConfig
-		wantNil  bool
+		name    string
+		config  *MinIOConfig
+		wantNil bool
 	}{
 		{
 			name: "HTTP endpoint",
 			config: &MinIOConfig{
-				Endpoint:  "localhost:9000",
+				Endpoint:   "localhost:9000",
 				BucketName: "test-bucket",
 				AccessKey:  "minioadmin",
 				SecretKey:  "minioadmin",
-				UseSSL:    false,
+				UseSSL:     false,
 			},
 			wantNil: false,
 		},
 		{
 			name: "HTTPS endpoint",
 			config: &MinIOConfig{
-				Endpoint:  "minio.example.com",
+				Endpoint:   "minio.example.com",
 				BucketName: "test-bucket",
 				AccessKey:  "access_key",
 				SecretKey:  "secret_key",
-				UseSSL:    true,
+				UseSSL:     true,
 			},
 			wantNil: false,
 		},
 		{
 			name: "endpoint with scheme",
 			config: &MinIOConfig{
-				Endpoint:  "https://minio.example.com",
+				Endpoint:   "https://minio.example.com",
 				BucketName: "test-bucket",
 				AccessKey:  "minioadmin",
 				SecretKey:  "minioadmin",
-				UseSSL:    true,
+				UseSSL:     true,
 			},
 			wantNil: false,
 		},
 		{
 			name: "endpoint with trailing slash",
 			config: &MinIOConfig{
-				Endpoint:  "localhost:9000/",
+				Endpoint:   "localhost:9000/",
 				BucketName: "test-bucket",
 				AccessKey:  "minioadmin",
 				SecretKey:  "minioadmin",
-				UseSSL:    false,
+				UseSSL:     false,
 			},
 			wantNil: false,
 		},
@@ -159,11 +159,11 @@ func TestIsMinIOEndpoint(t *testing.T) {
 // TestParseMinIOEndpoint tests parsing and validating MinIO endpoints.
 func TestParseMinIOEndpoint(t *testing.T) {
 	tests := []struct {
-		name      string
-		endpoint  string
-		useSSL    bool
-		expected  string
-		wantErr   bool
+		name     string
+		endpoint string
+		useSSL   bool
+		expected string
+		wantErr  bool
 	}{
 		{
 			name:     "HTTP without scheme",

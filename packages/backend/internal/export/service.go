@@ -9,9 +9,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	stderrors "errors"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -445,7 +445,7 @@ func (s *ExportService) itemExists(id models.UUID) (bool, error) {
 	}
 	// Check if it's a "not found" error (sql.ErrNoRows)
 	// All other errors should be propagated
-	if errors.Is(err, sql.ErrNoRows) {
+	if stderrors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return false, err
@@ -814,4 +814,4 @@ func (s *ExportService) ApplyRetentionPolicy(exportDir string, retentionCount in
 }
 
 // ErrNotFound is returned when an item is not found.
-var ErrNotFound = errors.New("item not found")
+var ErrNotFound = stderrors.New("item not found")

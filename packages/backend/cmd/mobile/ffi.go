@@ -31,7 +31,8 @@ var (
 	lastMu   sync.RWMutex
 )
 
-//export Init initializes the MemoNexus Core.
+//export Init
+// Init initializes the MemoNexus Core.
 func Init() {
 	once.Do(func() {
 		// Open database at default location
@@ -59,14 +60,16 @@ func Init() {
 	})
 }
 
-//export Cleanup cleans up resources.
+//export Cleanup
+// Cleanup cleans up resources.
 func Cleanup() {
 	if database != nil {
 		database.Close()
 	}
 }
 
-//export GetLastError returns the last error message.
+//export GetLastError
+// GetLastError returns the last error message.
 // Returns a C string that must be freed by the caller.
 func GetLastError() *C.char {
 	lastMu.RLock()
@@ -85,11 +88,10 @@ func setLastError(err string) {
 // Content Operations
 // =====================================================
 
-//export ContentCreate creates a new content item.
+//export ContentCreate
+// ContentCreate creates a new content item.
 // Returns JSON string that must be freed by the caller.
-func ContentCreate(
-	title, contentText, sourceURL, mediaType, tags, contentHash *C.char,
-) *C.char {
+func ContentCreate(title, contentText, sourceURL, mediaType, tags, contentHash *C.char) *C.char {
 	if repo == nil {
 		setLastError("Repository not initialized")
 		return nil
@@ -121,7 +123,8 @@ func ContentCreate(
 	return C.CString(string(data))
 }
 
-//export ContentList lists content items with pagination.
+//export ContentList
+// ContentList lists content items with pagination.
 // Returns JSON array that must be freed by the caller.
 func ContentList(limit, offset int32) *C.char {
 	if repo == nil {
@@ -150,7 +153,8 @@ func ContentList(limit, offset int32) *C.char {
 	return C.CString(string(data))
 }
 
-//export ContentGet gets a content item by ID.
+//export ContentGet
+// ContentGet gets a content item by ID.
 // Returns JSON string that must be freed by the caller.
 func ContentGet(id *C.char) *C.char {
 	if repo == nil {
@@ -177,9 +181,10 @@ func ContentGet(id *C.char) *C.char {
 	return C.CString(string(data))
 }
 
-//export ContentUpdate updates a content item.
+//export ContentUpdate
+// ContentUpdate updates a content item.
 // Returns JSON string that must be freed by the caller.
-func ContentUpdate(id, title, tags *C.char) *C.char {
+func ContentUpdate(id *C.char, title *C.char, tags *C.char) *C.char {
 	if repo == nil {
 		setLastError("Repository not initialized")
 		return nil
@@ -218,7 +223,8 @@ func ContentUpdate(id, title, tags *C.char) *C.char {
 	return C.CString(string(data))
 }
 
-//export ContentDelete deletes a content item.
+//export ContentDelete
+// ContentDelete deletes a content item.
 // Returns 0 on success, non-zero on error.
 func ContentDelete(id *C.char) int32 {
 	if repo == nil {
@@ -242,7 +248,8 @@ func ContentDelete(id *C.char) int32 {
 // Search Operations
 // =====================================================
 
-//export Search performs full-text search using FTS5.
+//export Search
+// Search performs full-text search using FTS5.
 // Returns JSON array that must be freed by the caller.
 func Search(query *C.char, limit int32) *C.char {
 	if database == nil {
@@ -335,7 +342,8 @@ func Search(query *C.char, limit int32) *C.char {
 // Tag Operations
 // =====================================================
 
-//export TagList lists all tags.
+//export TagList
+// TagList lists all tags.
 // Returns JSON array that must be freed by the caller.
 func TagList() *C.char {
 	if repo == nil {
@@ -358,9 +366,10 @@ func TagList() *C.char {
 	return C.CString(string(data))
 }
 
-//export TagCreate creates a new tag.
+//export TagCreate
+// TagCreate creates a new tag.
 // Returns JSON string that must be freed by the caller.
-func TagCreate(name, color *C.char) *C.char {
+func TagCreate(name *C.char, color *C.char) *C.char {
 	if repo == nil {
 		setLastError("Repository not initialized")
 		return nil
@@ -389,7 +398,8 @@ func TagCreate(name, color *C.char) *C.char {
 // Analysis Operations
 // =====================================================
 
-//export AnalyzeContent analyzes content using TF-IDF.
+//export AnalyzeContent
+// AnalyzeContent analyzes content using TF-IDF.
 // Returns JSON string that must be freed by the caller.
 func AnalyzeContent(contentText *C.char) *C.char {
 	analyzer := analysis.NewTFIDFAnalyzer()
@@ -413,7 +423,8 @@ func AnalyzeContent(contentText *C.char) *C.char {
 // Memory Management Helpers
 // =====================================================
 
-//export FreeString frees a string allocated by Go.
+//export FreeString
+// FreeString frees a string allocated by Go.
 func FreeString(ptr *C.char) {
 	if ptr != nil {
 		C.free(unsafe.Pointer(ptr))

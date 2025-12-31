@@ -138,7 +138,6 @@ class _ArchiveListTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _ArchiveListTile({
-    super.key,
     required this.archive,
     required this.onDelete,
   });

@@ -120,7 +120,7 @@ class SummaryView extends StatelessWidget {
             label: '${(confidence! * 100).toInt()}% confidence',
           ),
         if (aiUsed)
-          _MetadataChip(
+          const _MetadataChip(
             icon: Icons.smart_toy,
             label: 'AI Generated',
             color: Colors.deepPurple,

@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"testing"
 
+	_ "modernc.org/sqlite"
+
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
 // setupTestDB creates an in-memory SQLite database for testing.
 func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

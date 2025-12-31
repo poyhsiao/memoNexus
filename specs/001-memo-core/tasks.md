@@ -433,10 +433,10 @@ Based on plan.md structure:
 
 ### Accessibility Compliance (FR-064 to FR-073)
 
-- [ ] T203 [P] Add keyboard navigation support to all interactive elements in apps/frontend/lib/widgets/ (WCAG 2.1 AA)
-- [ ] T204 [P] Add screen reader labels (semantics) in apps/frontend/lib/screens/ and apps/frontend/lib/widgets/ (NVDA/JAWS, VoiceOver, TalkBack)
+- [X] T203 [P] Add keyboard navigation support to all interactive elements in apps/frontend/lib/widgets/ (WCAG 2.1 AA)
+- [X] T204 [P] Add screen reader labels (semantics) in apps/frontend/lib/screens/ and apps/frontend/lib/widgets/ (NVDA/JAWS, VoiceOver, TalkBack)
 - [X] T205 [P] Verify color contrast ratios (4.5:1 normal, 3:1 large) in apps/frontend/lib/theme/app_theme.dart
-- [ ] T206 [P] Add focus management and visible indicators in apps/frontend/lib/widgets/ (logical tab order)
+- [X] T206 [P] Add focus management and visible indicators in apps/frontend/lib/widgets/ (logical tab order)
 - [X] T207 [P] Add text scaling support (up to 200%) in apps/frontend/lib/theme/app_theme.dart
 - [X] T208 [P] Configure keyboard shortcuts documentation in apps/frontend/lib/services/keyboard_shortcuts.dart
 
@@ -452,31 +452,31 @@ Based on plan.md structure:
 ### Graceful Degradation (FR-056 to FR-063)
 
 - [X] T215 [P] Implement non-blocking notification system in apps/frontend/lib/widgets/notification_banner.dart (dismissable, retry button for temporary failures)
-- [ ] T216 [P] Add AI service failure handling in packages/backend/internal/analysis/ai/ (timeout, rate limit, invalid credentials → fall back to standard mode)
-- [ ] T217 [P] Add S3 service failure handling in packages/backend/internal/sync/engine/sync.go (auth error, timeout, quota exceeded → continue offline)
-- [ ] T218 [P] Implement sync queue for offline operations in packages/backend/internal/sync/queue/queue.go (queue when network unavailable, process when connection resumes)
-- [ ] T219 [P] Add automatic retry with exponential backoff in packages/backend/internal/sync/queue/queue.go (max 3 attempts)
+- [X] T216 [P] Add AI service failure handling in packages/backend/internal/analysis/ai/ (timeout, rate limit, invalid credentials → fall back to standard mode)
+- [X] T217 [P] Add S3 service failure handling in packages/backend/internal/sync/engine/sync.go (auth error, timeout, quota exceeded → continue offline)
+- [X] T218 [P] Implement sync queue for offline operations in packages/backend/internal/sync/queue/queue.go (queue when network unavailable, process when connection resumes)
+- [X] T219 [P] Add automatic retry with exponential backoff in packages/backend/internal/sync/queue/queue.go (max 3 attempts)
 
 ### Performance Optimization (FR-038 to FR-041, SC-005 to SC-007)
 
-- [ ] T220 [P] Optimize content list rendering (virtual scrolling) in apps/frontend/lib/widgets/content_list.dart (render within 500ms for 1,000 items)
-- [ ] T221 [P] Implement thumbnail generation background queue in packages/backend/internal/parser/media/thumbnail.go (non-blocking UI)
-- [ ] T222 [P] Add database query optimization (indexes, prepared statements) in packages/backend/internal/db/repository.go
-- [ ] T223 [P] Implement FTS incremental indexing for large datasets in packages/backend/internal/db/search.go (handle 10K+ items)
+- [X] T220 [P] Optimize content list rendering (virtual scrolling) in apps/frontend/lib/widgets/content_list.dart (render within 500ms for 1,000 items)
+- [X] T221 [P] Implement thumbnail generation background queue in packages/backend/internal/parser/media/thumbnail.go (non-blocking UI)
+- [X] T222 [P] Add database query optimization (indexes, prepared statements) in packages/backend/internal/db/repository.go
+- [X] T223 [P] Implement FTS incremental indexing for large datasets in packages/backend/internal/db/search.go (handle 10K+ items)
 - [ ] T224 Verify application launch time (<2 seconds with 10K items) in apps/frontend/lib/main.dart
 
 ### Security Hardening (FR-042 to FR-047, SC-011 to SC-015)
 
-- [ ] T225 [P] Implement platform-secure storage for credentials (Keychain on macOS, Credential Manager on Windows, Keystore on Android/iOS) in packages/backend/internal/crypto/secure_storage.go
-- [ ] T226 [P] Add API key encryption at rest in packages/backend/internal/models/ai_config.go and packages/backend/internal/models/sync_credential.go (AES-256-GCM)
-- [ ] T227 [P] Verify export passwords are NOT stored with archive in packages/backend/internal/export/crypto/encrypt.go
-- [ ] T228 [P] Add telemetry/metrics verification (zero external transmission without opt-in) in packages/backend/internal/telemetry/telemetry.go (no-op per FR-053)
+- [X] T225 [P] Implement platform-secure storage for credentials (Keychain on macOS, Credential Manager on Windows, Keystore on Android/iOS) in packages/backend/internal/crypto/secure_storage.go
+- [X] T226 [P] Add API key encryption at rest in packages/backend/internal/models/ai_config.go and packages/backend/internal/models/sync_credential.go (AES-256-GCM)
+- [X] T227 [P] Verify export passwords are NOT stored with archive in packages/backend/internal/export/crypto/encrypt.go
+- [X] T228 [P] Add telemetry/metrics verification (zero external transmission without opt-in) in packages/backend/internal/telemetry/telemetry.go (no-op per FR-053)
 
 ### Documentation
 
-- [ ] T229 Update CLAUDE.md with implementation status
-- [ ] T230 Verify quickstart.md accuracy (run through setup instructions)
-- [ ] T231 Update README.md with usage examples and screenshots
+- [X] T229 Update CLAUDE.md with implementation status
+- [X] T230 Verify quickstart.md accuracy (run through setup instructions)
+- [X] T231 Update README.md with usage examples and screenshots
 
 ### Final Testing
 

@@ -59,8 +59,8 @@ func setupTestDB(b *testing.B) *sql.DB {
 // generateUUID creates a random UUID string
 func generateUUID() string {
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		rand.Uint32(), rand.Uint16()&0x0fff, rand.Uint16()&0x0fff,
-		rand.Uint16()&0x0fff, rand.Uint64()&0xffffffffffff)
+		rand.Uint32(), uint16(rand.Uint32())&0x0fff, uint16(rand.Uint32())&0x0fff,
+		uint16(rand.Uint32())&0x0fff, rand.Uint64()&0xffffffffffff)
 }
 
 // generateSampleContent generates realistic sample content

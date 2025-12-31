@@ -1,11 +1,9 @@
 // File Upload Widget
 // Drag-and-drop file upload widget with file preview
 
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cross_file/cross_file.dart';
 import '../providers/capture_provider.dart';
 
 class FileUploadWidget extends ConsumerWidget {

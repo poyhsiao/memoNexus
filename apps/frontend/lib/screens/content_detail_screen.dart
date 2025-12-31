@@ -136,11 +136,11 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
           visualDensity: VisualDensity.compact,
         ),
         if (item.contentHash != null)
-          Chip(
-            avatar: const Icon(Icons.fingerprint, size: 16),
+          const Chip(
+            avatar: Icon(Icons.fingerprint, size: 16),
             label: Text(
               'SHA-256',
-              style: const TextStyle(fontSize: 11),
+              style: TextStyle(fontSize: 11),
             ),
             visualDensity: VisualDensity.compact,
           ),
@@ -267,7 +267,7 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
     }
 
     return KeywordSuggestions(
-      keywords: [],
+      keywords: const [],
       onKeywordSelected: (keyword) => _addKeywordAsTag(context, item, keyword),
       onRefresh: () => _extractKeywords(context, item),
       isLoading: _isExtractingKeywords,

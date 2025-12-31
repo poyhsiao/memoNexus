@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kimhsiao/memonexus/backend/internal/models"
+	"github.com/kimhsiao/memonexus/backend/internal/uuid"
 )
 
 // SearchOptions contains parameters for search queries.
@@ -191,4 +193,228 @@ func (r *Repository) SearchSimple(query string, limit int) (*SearchResponse, err
 		Query: query,
 		Limit: limit,
 	})
+}
+
+// =====================================================
+// FTS Index Management (T223)
+// =====================================================
+
+// OptimizeFTSIndex optimizes the FTS5 full-text search index.
+// T223: Compacts the index by merging smaller segments into larger ones.
+// This should be called periodically or after large bulk imports.
+// For 10K+ items, this can significantly improve query performance.
+func (r *Repository) OptimizeFTSIndex() error {
+	// FTS5 optimize command compacts the index
+	query := `INSERT INTO content_fts(content_fts) VALUES('optimize')`
+	_, err := r.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to optimize FTS index: %w", err)
+	}
+	return nil
+}
+
+// RebuildFTSIndex completely rebuilds the FTS index from content_items.
+// T223: Use this if the index becomes corrupted or out of sync.
+// This is a slow operation for large datasets and should be used sparingly.
+func (r *Repository) RebuildFTSIndex() error {
+	// Start transaction
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Drop existing FTS table
+	_, err = tx.Exec(`DROP TABLE IF EXISTS content_fts`)
+	if err != nil {
+		return fmt.Errorf("failed to drop FTS table: %w", err)
+	}
+
+	// Recreate FTS table
+	createFTS := `
+	CREATE VIRTUAL TABLE content_fts USING fts5(
+		title,
+		content_text,
+		tags,
+		content=content_items,
+		content_rowid=rowid,
+		tokenize='unicode61 remove_diacritics 1'
+	)`
+	_, err = tx.Exec(createFTS)
+	if err != nil {
+		return fmt.Errorf("failed to recreate FTS table: %w", err)
+	}
+
+	// Populate FTS index with existing content
+	populateFTS := `
+	INSERT INTO content_fts(rowid, title, content_text, tags)
+	SELECT rowid, title, content_text, tags FROM content_items
+	`
+	_, err = tx.Exec(populateFTS)
+	if err != nil {
+		return fmt.Errorf("failed to populate FTS index: %w", err)
+	}
+
+	// Recreate triggers
+	triggers := []string{
+		`CREATE TRIGGER content_items_ai AFTER INSERT ON content_items BEGIN
+			INSERT INTO content_fts(rowid, title, content_text, tags)
+			VALUES (new.rowid, new.title, new.content_text, new.tags);
+		END`,
+		`CREATE TRIGGER content_items_ad AFTER DELETE ON content_items BEGIN
+			INSERT INTO content_fts(content_fts, rowid, title, content_text, tags)
+			VALUES ('delete', old.rowid, old.title, old.content_text, old.tags);
+		END`,
+		`CREATE TRIGGER content_items_au AFTER UPDATE ON content_items BEGIN
+			INSERT INTO content_fts(content_fts, rowid, title, content_text, tags)
+			VALUES ('delete', old.rowid, old.title, old.content_text, old.tags);
+			INSERT INTO content_fts(rowid, title, content_text, tags)
+			VALUES (new.rowid, new.title, new.content_text, new.tags);
+		END`,
+	}
+
+	for _, trigger := range triggers {
+		_, err = tx.Exec(trigger)
+		if err != nil {
+			return fmt.Errorf("failed to recreate trigger: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// FTSIntegrityCheck verifies the FTS index is consistent with source data.
+// T223: Returns true if index is valid, false otherwise.
+// For large datasets, this can take significant time.
+func (r *Repository) FTSIntegrityCheck() (bool, error) {
+	// FTS5 integrity check command
+	query := `INSERT INTO content_fts(content_fts, rank) VALUES('integrity-check', 0)`
+	_, err := r.db.Exec(query)
+	if err != nil {
+		// Integrity check failed - index is corrupted
+		return false, nil
+	}
+	return true, nil
+}
+
+// FTSIndexSize returns the approximate size of the FTS index in bytes.
+// T223: Useful for monitoring index growth and deciding when to optimize.
+func (r *Repository) FTSIndexSize() (int64, error) {
+	query := `
+	SELECT SUM(pgsize) AS size
+	FROM sqlite_dbpage
+	WHERE pgno IN (
+		SELECT rootpage FROM sqlite_master
+		WHERE tbl_name = 'content_fts'
+		UNION ALL
+		SELECT rootpage FROM sqlite_master
+		WHERE sql LIKE '%content_fts%'
+	)
+	`
+	var size sql.NullInt64
+	err := r.db.QueryRow(query).Scan(&size)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get FTS index size: %w", err)
+	}
+	if size.Valid {
+		return size.Int64, nil
+	}
+	return 0, nil
+}
+
+// BatchImportContent imports multiple content items efficiently.
+// T223: Disables triggers during import, then rebuilds FTS index once.
+// Much faster than inserting items one-by-one with triggers enabled.
+// Returns the number of items imported.
+func (r *Repository) BatchImportContent(items []*models.ContentItem) (int, error) {
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	// Start transaction
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Disable FTS triggers temporarily for bulk insert
+	_, err = tx.Exec(`DROP TRIGGER IF EXISTS content_items_ai`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to disable FTS insert trigger: %w", err)
+	}
+	_, err = tx.Exec(`DROP TRIGGER IF EXISTS content_items_au`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to disable FTS update trigger: %w", err)
+	}
+
+	// Prepare insert statement
+	stmt, err := tx.Prepare(`
+	INSERT INTO content_items (id, title, content_text, source_url, media_type, tags, summary,
+		is_deleted, created_at, updated_at, version, content_hash)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to prepare insert statement: %w", err)
+	}
+	defer stmt.Close()
+
+	// Insert all items
+	now := time.Now().Unix()
+	count := 0
+	for _, item := range items {
+		if item.ID == "" {
+			item.ID = models.UUID(uuid.New())
+			item.CreatedAt = now
+			item.UpdatedAt = now
+			item.Version = 1
+		}
+
+		_, err := stmt.Exec(
+			item.ID, item.Title, item.ContentText, item.SourceURL,
+			item.MediaType, item.Tags, item.Summary, item.IsDeleted,
+			item.CreatedAt, item.UpdatedAt, item.Version, item.ContentHash,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("failed to insert item %s: %w", item.ID, err)
+		}
+		count++
+	}
+
+	// Recreate FTS triggers
+	triggers := []string{
+		`CREATE TRIGGER content_items_ai AFTER INSERT ON content_items BEGIN
+			INSERT INTO content_fts(rowid, title, content_text, tags)
+			VALUES (new.rowid, new.title, new.content_text, new.tags);
+		END`,
+		`CREATE TRIGGER content_items_au AFTER UPDATE ON content_items BEGIN
+			INSERT INTO content_fts(content_fts, rowid, title, content_text, tags)
+			VALUES ('delete', old.rowid, old.title, old.content_text, old.tags);
+			INSERT INTO content_fts(rowid, title, content_text, tags)
+			VALUES (new.rowid, new.title, new.content_text, new.tags);
+		END`,
+	}
+
+	for _, trigger := range triggers {
+		_, err = tx.Exec(trigger)
+		if err != nil {
+			return 0, fmt.Errorf("failed to recreate trigger: %w", err)
+		}
+	}
+
+	// Populate FTS index in one batch operation
+	_, err = tx.Exec(`
+	INSERT INTO content_fts(rowid, title, content_text, tags)
+	SELECT rowid, title, content_text, tags FROM content_items
+	WHERE rowid > COALESCE((SELECT MAX(rowid) FROM content_fts), 0)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to populate FTS index: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return count, nil
 }

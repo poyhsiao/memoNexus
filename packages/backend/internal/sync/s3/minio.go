@@ -11,11 +11,11 @@ import (
 
 // MinIOConfig holds MinIO-specific configuration.
 type MinIOConfig struct {
-	Endpoint  string // MinIO server endpoint (e.g., "localhost:9000" or "https://minio.example.com")
+	Endpoint   string // MinIO server endpoint (e.g., "localhost:9000" or "https://minio.example.com")
 	BucketName string
 	AccessKey  string // MinIO Root Username or access key
 	SecretKey  string // MinIO Root Password or secret key
-	UseSSL    bool   // Use HTTPS connection (default: false for development)
+	UseSSL     bool   // Use HTTPS connection (default: false for development)
 }
 
 // NewMinIOClient creates an S3 client configured for MinIO.
@@ -62,7 +62,7 @@ func NewMinIOClient(config *MinIOConfig) *sync.S3Client {
 		AccessKey:      config.AccessKey,
 		SecretKey:      config.SecretKey,
 		Region:         "us-east-1", // MinIO doesn't use regions, default required
-		ForcePathStyle: true, // Path-style URLs required for MinIO
+		ForcePathStyle: true,        // Path-style URLs required for MinIO
 	})
 }
 

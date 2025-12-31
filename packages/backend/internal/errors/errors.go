@@ -13,6 +13,7 @@ const (
 	ErrNotFound    ErrorCode = "NOT_FOUND"
 	ErrDuplicate   ErrorCode = "DUPLICATE"
 	ErrPermission  ErrorCode = "PERMISSION_DENIED"
+	ErrValidation  ErrorCode = "VALIDATION_ERROR"
 
 	// Database errors
 	ErrDatabase    ErrorCode = "DATABASE_ERROR"
@@ -29,20 +30,26 @@ const (
 	ErrTagInvalid  ErrorCode = "TAG_INVALID"
 
 	// Sync errors
-	ErrSyncNotConfigured ErrorCode = "SYNC_NOT_CONFIGURED"
-	ErrSyncFailed        ErrorCode = "SYNC_FAILED"
-	ErrSyncConflict      ErrorCode = "SYNC_CONFLICT"
+	ErrSyncNotConfigured  ErrorCode = "SYNC_NOT_CONFIGURED"
+	ErrSyncFailed         ErrorCode = "SYNC_FAILED"
+	ErrSyncConflict       ErrorCode = "SYNC_CONFLICT"
+	ErrSyncAuthFailed     ErrorCode = "SYNC_AUTH_FAILED"
+	ErrSyncQuotaExceeded  ErrorCode = "SYNC_QUOTA_EXCEEDED"
+	ErrSyncTimeout        ErrorCode = "SYNC_TIMEOUT"
 
 	// AI errors
-	ErrAINotConfigured ErrorCode = "AI_NOT_CONFIGURED"
-	ErrAIFailed        ErrorCode = "AI_FAILED"
-	ErrAIRateLimit     ErrorCode = "AI_RATE_LIMIT"
+	ErrAINotConfigured     ErrorCode = "AI_NOT_CONFIGURED"
+	ErrAIFailed            ErrorCode = "AI_FAILED"
+	ErrAIRateLimit         ErrorCode = "AI_RATE_LIMIT"
+	ErrAITimeout           ErrorCode = "AI_TIMEOUT"
+	ErrAIInvalidCredentials ErrorCode = "AI_INVALID_CREDENTIALS"
 
 	// Export errors
 	ErrExportFailed      ErrorCode = "EXPORT_FAILED"
 	ErrImportFailed      ErrorCode = "IMPORT_FAILED"
 	ErrInvalidPassword   ErrorCode = "INVALID_PASSWORD"
 	ErrCorruptedArchive  ErrorCode = "CORRUPTED_ARCHIVE"
+	ErrCryptoFailed      ErrorCode = "CRYPTO_FAILED"
 )
 
 // AppError represents an application error with code and message.

@@ -1,21 +1,12 @@
 // Export Screen - T195: User Story 5
 // Screen for initiating and managing data exports
-//
-// ★ Insight ─────────────────────────────────────
-// 1. Scaffold provides basic app structure with app bar
-//    and body, following Material Design guidelines.
-// 2. Form validation using GlobalKey ensures data
-//    integrity before submission.
-// 3. TextField with obscureText provides secure password
-//    input for export encryption.
-// ─────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/export_provider.dart';
+import '../widgets/export_progress.dart';
 import '../widgets/auto_export_config.dart';
 import '../widgets/export_archive_list.dart';
-import '../widgets/export_progress.dart';
 
 class ExportScreen extends ConsumerStatefulWidget {
   const ExportScreen({super.key});
@@ -61,11 +52,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Export Progress
           const ExportProgressWidget(),
           const SizedBox(height: 16),
-
-          // Manual Export Section
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -103,7 +91,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                           return 'Password must be at least 8 characters';
                         }
                         return null;
-                      ),
+                      },
                     ),
                     const SizedBox(height: 16),
                     SwitchListTile(
@@ -133,12 +121,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Auto Export Configuration
           const AutoExportConfigWidget(),
           const SizedBox(height: 16),
-
-          // Export Archives List
           const ExportArchiveListWidget(),
         ],
       ),

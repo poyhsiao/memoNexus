@@ -17,19 +17,19 @@ import (
 type ExportInterval string
 
 const (
-	IntervalManual ExportInterval = "manual"
-	IntervalDaily  ExportInterval = "daily"
-	IntervalWeekly ExportInterval = "weekly"
+	IntervalManual  ExportInterval = "manual"
+	IntervalDaily   ExportInterval = "daily"
+	IntervalWeekly  ExportInterval = "weekly"
 	IntervalMonthly ExportInterval = "monthly"
 )
 
 // SchedulerConfig holds the scheduler configuration.
 type SchedulerConfig struct {
 	Interval       ExportInterval // How often to export
-	RetentionCount int             // Number of archives to keep (0 = unlimited)
-	IncludeMedia   bool            // Whether to include media files in exports
-	ExportDir      string          // Directory to store exports (default: "exports")
-	Password       string          // Password for encryption (empty = no encryption)
+	RetentionCount int            // Number of archives to keep (0 = unlimited)
+	IncludeMedia   bool           // Whether to include media files in exports
+	ExportDir      string         // Directory to store exports (default: "exports")
+	Password       string         // Password for encryption (empty = no encryption)
 }
 
 // Scheduler manages automatic export scheduling.
@@ -201,12 +201,12 @@ func (s *Scheduler) applyRetentionPolicy(ctx context.Context) error {
 
 // ArchiveInfo represents metadata about an export archive.
 type ArchiveInfo struct {
-	Path       string
-	SizeBytes  int64
-	CreatedAt  time.Time
-	Checksum   string
-	ItemCount  int
-	Encrypted  bool
+	Path      string
+	SizeBytes int64
+	CreatedAt time.Time
+	Checksum  string
+	ItemCount int
+	Encrypted bool
 }
 
 // listArchives returns all archives in the export directory.
