@@ -232,3 +232,154 @@ func TestDeriveKey(t *testing.T) {
 		t.Error("Different password should produce different key")
 	}
 }
+
+// =====================================================
+// Additional Error Cases Tests
+// =====================================================
+
+// TestEncryptFile_nonExistentSource verifies error handling for missing source file.
+func TestEncryptFile_nonExistentSource(t *testing.T) {
+	tempDir := t.TempDir()
+
+	dstFile := filepath.Join(tempDir, "encrypted.bin")
+	password := "test-password"
+
+	_, err := encryptFile("/non/existent/file.txt", dstFile, password)
+	if err == nil {
+		t.Error("encryptFile() with non-existent source should return error")
+	}
+}
+
+// TestEncryptFile_invalidDestination verifies error handling for invalid destination.
+func TestEncryptFile_invalidDestination(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source file
+	srcFile := filepath.Join(tempDir, "source.txt")
+	os.WriteFile(srcFile, []byte("test data"), 0644)
+
+	password := "test-password"
+
+	// Try to write to invalid path
+	_, err := encryptFile(srcFile, "/non/existent/dir/encrypted.bin", password)
+	if err == nil {
+		t.Error("encryptFile() with invalid destination should return error")
+	}
+}
+
+// TestDecryptFile_nonExistentSource verifies error handling for missing encrypted file.
+func TestDecryptFile_nonExistentSource(t *testing.T) {
+	tempDir := t.TempDir()
+
+	dstFile := filepath.Join(tempDir, "decrypted.txt")
+	password := "test-password"
+
+	err := decryptFile("/non/existent/encrypted.bin", dstFile, password)
+	if err == nil {
+		t.Error("decryptFile() with non-existent source should return error")
+	}
+}
+
+// TestDecryptFile_corruptedData verifies error handling for corrupted encrypted file.
+func TestDecryptFile_corruptedData(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a file that's too short to be valid
+	corruptedFile := filepath.Join(tempDir, "corrupted.bin")
+	os.WriteFile(corruptedFile, []byte("too short"), 0644)
+
+	dstFile := filepath.Join(tempDir, "decrypted.txt")
+	password := "test-password"
+
+	err := decryptFile(corruptedFile, dstFile, password)
+	if err == nil {
+		t.Error("decryptFile() with corrupted data should return error")
+	}
+}
+
+// TestDecryptFile_invalidDestination verifies error handling for invalid destination.
+func TestDecryptFile_invalidDestination(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// First create a valid encrypted file
+	srcFile := filepath.Join(tempDir, "source.txt")
+	os.WriteFile(srcFile, []byte("test data"), 0644)
+
+	encryptedFile := filepath.Join(tempDir, "encrypted.bin")
+	password := "test-password"
+
+	_, err := encryptFile(srcFile, encryptedFile, password)
+	if err != nil {
+		t.Fatalf("Failed to create encrypted file: %v", err)
+	}
+
+	// Try to decrypt to invalid path
+	err = decryptFile(encryptedFile, "/non/existent/dir/decrypted.txt", password)
+	if err == nil {
+		t.Error("decryptFile() with invalid destination should return error")
+	}
+}
+
+// TestEncryptFile_specialCharacters verifies encryption with special characters in password.
+func TestEncryptFile_specialCharacters(t *testing.T) {
+	tempDir := t.TempDir()
+
+	srcFile := filepath.Join(tempDir, "test.txt")
+	plaintext := []byte("Special characters test")
+	os.WriteFile(srcFile, plaintext, 0644)
+
+	dstFile := filepath.Join(tempDir, "encrypted.bin")
+	decryptedFile := filepath.Join(tempDir, "decrypted.txt")
+
+	// Password with special characters
+	password := "p@$$w0rd!#$%^&*()_+-=[]{}|;':\",./<>?"
+
+	// Encrypt
+	_, err := encryptFile(srcFile, dstFile, password)
+	if err != nil {
+		t.Fatalf("Failed to encrypt with special characters: %v", err)
+	}
+
+	// Decrypt
+	err = decryptFile(dstFile, decryptedFile, password)
+	if err != nil {
+		t.Fatalf("Failed to decrypt with special characters: %v", err)
+	}
+
+	// Verify
+	decrypted, _ := os.ReadFile(decryptedFile)
+	if string(decrypted) != string(plaintext) {
+		t.Error("Decrypted content doesn't match original")
+	}
+}
+
+// TestEncryptDecrypt_unicode verifies encryption with unicode content.
+func TestEncryptDecrypt_unicode(t *testing.T) {
+	tempDir := t.TempDir()
+
+	srcFile := filepath.Join(tempDir, "test.txt")
+	plaintext := []byte("Hello 世界 🌍 Привет мир")
+	os.WriteFile(srcFile, plaintext, 0644)
+
+	dstFile := filepath.Join(tempDir, "encrypted.bin")
+	decryptedFile := filepath.Join(tempDir, "decrypted.txt")
+	password := "unicode-password-密码"
+
+	// Encrypt
+	_, err := encryptFile(srcFile, dstFile, password)
+	if err != nil {
+		t.Fatalf("Failed to encrypt unicode: %v", err)
+	}
+
+	// Decrypt
+	err = decryptFile(dstFile, decryptedFile, password)
+	if err != nil {
+		t.Fatalf("Failed to decrypt unicode: %v", err)
+	}
+
+	// Verify
+	decrypted, _ := os.ReadFile(decryptedFile)
+	if string(decrypted) != string(plaintext) {
+		t.Errorf("Unicode content mismatch.\nGot: %s\nWant: %s", string(decrypted), string(plaintext))
+	}
+}

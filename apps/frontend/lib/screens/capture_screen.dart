@@ -270,10 +270,12 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
     await notifier.submit();
 
     // Success is handled by checking createdItem in build()
-    if (mounted && notifier.state.error != null) {
+    // Read state through provider instead of accessing protected member
+    final currentState = ref.read(captureProvider);
+    if (mounted && currentState.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(notifier.state.error!),
+          content: Text(currentState.error!),
           action: SnackBarAction(
             label: 'Dismiss',
             onPressed: () {

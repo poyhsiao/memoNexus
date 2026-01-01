@@ -83,7 +83,8 @@ func EncryptArchive(data []byte, password string) ([]byte, error) {
 	}
 
 	// Encrypt and authenticate the data
-	ciphertext := gcm.Seal(nonce, nonce, data, nil)
+	// T227: Use nil as destination to avoid prepending nonce (already in header)
+	ciphertext := gcm.Seal(nil, nonce, data, nil)
 
 	// Create header (without password!)
 	header := ArchiveHeader{
@@ -211,8 +212,8 @@ func parseHeader(data []byte) (ArchiveHeader, []byte, error) {
 	var header ArchiveHeader
 	reader := io.NewSectionReader(bytes.NewReader(data), 0, int64(len(data)))
 
-	// Read and verify magic number (6 bytes)
-	magic := make([]byte, 6)
+	// Read and verify magic number (7 bytes: "MNEXARC")
+	magic := make([]byte, 7)
 	if _, err := io.ReadFull(reader, magic); err != nil {
 		return header, nil, fmt.Errorf("failed to read magic: %w", err)
 	}
@@ -264,8 +265,8 @@ func parseHeader(data []byte) (ArchiveHeader, []byte, error) {
 		return header, nil, fmt.Errorf("failed to read salt: %w", err)
 	}
 
-	// Calculate header size
-	headerSize := 6 + 1 + 1 + len(header.Algorithm) + 1 + len(header.Nonce) + 1 + len(header.Salt)
+	// Calculate header size (magic=7 + version=1 + algLen=1 + alg + nonceLen=1 + nonce + saltLen=1 + salt)
+	headerSize := 7 + 1 + 1 + len(header.Algorithm) + 1 + len(header.Nonce) + 1 + len(header.Salt)
 
 	// Return remaining data (encrypted payload)
 	if len(data) < headerSize {

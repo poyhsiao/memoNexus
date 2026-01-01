@@ -67,8 +67,8 @@ func (r *Repository) Search(opts *SearchOptions) (*SearchResponse, error) {
 		SELECT ci.id, ci.title, ci.content_text, ci.source_url, ci.media_type, ci.tags,
 			   ci.summary, ci.is_deleted, ci.created_at, ci.updated_at, ci.version, ci.content_hash
 		FROM content_items ci
-		INNER JOIN content_items_fts fts ON ci.rowid = fts.rowid
-		WHERE content_items_fts MATCH ? AND ci.is_deleted = 0
+		INNER JOIN content_fts fts ON ci.rowid = fts.rowid
+		WHERE content_fts MATCH ? AND ci.is_deleted = 0
 	`
 
 	whereClauses := []string{}
@@ -161,8 +161,8 @@ func (r *Repository) Search(opts *SearchOptions) (*SearchResponse, error) {
 	countQuery := `
 		SELECT COUNT(*)
 		FROM content_items ci
-		INNER JOIN content_items_fts fts ON ci.rowid = fts.rowid
-		WHERE content_items_fts MATCH ? AND ci.is_deleted = 0
+		INNER JOIN content_fts fts ON ci.rowid = fts.rowid
+		WHERE content_fts MATCH ? AND ci.is_deleted = 0
 	`
 	countArgs := []interface{}{opts.Query}
 	if len(whereClauses) > 0 {
@@ -403,10 +403,12 @@ func (r *Repository) BatchImportContent(items []*models.ContentItem) (int, error
 	}
 
 	// Populate FTS index in one batch operation
+	// Note: For FTS5 with external content table, we need to use a simpler approach
+	// than WHERE rowid > (SELECT MAX(rowid) FROM content_fts) because FTS5 virtual tables
+	// don't support rowid subqueries the same way
 	_, err = tx.Exec(`
 	INSERT INTO content_fts(rowid, title, content_text, tags)
 	SELECT rowid, title, content_text, tags FROM content_items
-	WHERE rowid > COALESCE((SELECT MAX(rowid) FROM content_fts), 0)
 	`)
 	if err != nil {
 		return 0, fmt.Errorf("failed to populate FTS index: %w", err)

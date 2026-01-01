@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"image"
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
 	"os"
 	"path/filepath"

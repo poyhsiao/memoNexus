@@ -2,7 +2,9 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,7 +174,9 @@ func (m *Migrator) applyMigration(version int, filename string) error {
 	description = strings.TrimPrefix(description, fmt.Sprintf("V%d__", version))
 	query := `INSERT INTO schema_migrations (version, applied_at, description, checksum)
 			  VALUES (?, ?, ?, ?)`
-	checksum := "PLACEHOLDER_SHA256" // TODO: Compute actual SHA-256
+	// Compute SHA-256 checksum of migration SQL content
+	hash := sha256.Sum256(content)
+	checksum := hex.EncodeToString(hash[:])
 	if _, err := tx.Exec(query, version, time.Now().Unix(), description, checksum); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}

@@ -420,6 +420,255 @@ func TestSummarizeOllama(t *testing.T) {
 }
 
 // =====================================================
+// Additional Keyword Extraction Tests
+// =====================================================
+
+// TestExtractKeywordsClaude verifies Claude keyword extraction.
+func TestExtractKeywordsClaude(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify Claude-specific headers
+		if r.Header.Get("anthropic-version") == "" {
+			t.Error("expected anthropic-version header")
+		}
+
+		if r.Header.Get("x-api-key") == "" {
+			t.Error("expected x-api-key header")
+		}
+
+		// Send mock response with keywords
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"text": "artificial, intelligence, machine, learning, neural, network",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderClaude,
+		APIEndpoint: server.URL,
+		APIKey:      "test-key",
+		ModelName:   "claude-3-opus",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	keywords, err := analyzer.ExtractKeywords("Artificial intelligence and machine learning are transforming technology.")
+
+	if err != nil {
+		t.Fatalf("ExtractKeywords() returned error: %v", err)
+	}
+
+	if len(keywords) == 0 {
+		t.Error("expected keywords from Claude")
+	}
+
+	// Verify expected keywords
+	expectedKeywords := []string{"artificial", "intelligence", "machine", "learning", "neural", "network"}
+	for _, expected := range expectedKeywords {
+		found := false
+		for _, kw := range keywords {
+			if strings.EqualFold(kw, expected) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected keyword '%s' not found", expected)
+		}
+	}
+}
+
+// TestExtractKeywordsClaudeError verifies Claude keyword extraction error handling.
+func TestExtractKeywordsClaudeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return Claude API error response
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]string{
+				"message": "Invalid request",
+				"type":    "invalid_request_error",
+			},
+		})
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderClaude,
+		APIEndpoint: server.URL,
+		APIKey:      "test-key",
+		ModelName:   "claude-3-opus",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	// Should fallback to TF-IDF
+	keywords, err := analyzer.ExtractKeywords("Test text for fallback.")
+
+	if err != nil {
+		t.Fatalf("ExtractKeywords() should fallback, got error: %v", err)
+	}
+
+	if len(keywords) == 0 {
+		t.Error("expected keywords from fallback TF-IDF")
+	}
+}
+
+// TestExtractKeywordsOllama verifies Ollama keyword extraction.
+func TestExtractKeywordsOllama(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify Ollama-specific request
+		if !strings.Contains(r.URL.Path, "api/generate") {
+			t.Errorf("expected api/generate path, got %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		// Return comma-separated keywords
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"response": "data, science, analytics, statistics, modeling",
+		})
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderOllama,
+		APIEndpoint: server.URL,
+		APIKey:      "", // Ollama doesn't need API key
+		ModelName:   "llama2",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	keywords, err := analyzer.ExtractKeywords("Data science involves analytics and statistics.")
+
+	if err != nil {
+		t.Fatalf("ExtractKeywords() returned error: %v", err)
+	}
+
+	if len(keywords) == 0 {
+		t.Error("expected keywords from Ollama")
+	}
+
+	// Verify expected keywords
+	expectedKeywords := []string{"data", "science", "analytics", "statistics", "modeling"}
+	for _, expected := range expectedKeywords {
+		found := false
+		for _, kw := range keywords {
+			if strings.EqualFold(kw, expected) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected keyword '%s' not found", expected)
+		}
+	}
+}
+
+// TestExtractKeywordsOllamaError verifies Ollama keyword extraction error handling.
+func TestExtractKeywordsOllamaError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderOllama,
+		APIEndpoint: server.URL,
+		APIKey:      "",
+		ModelName:   "llama2",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	// Should fallback to TF-IDF
+	keywords, err := analyzer.ExtractKeywords("Test text for fallback.")
+
+	if err != nil {
+		t.Fatalf("ExtractKeywords() should fallback, got error: %v", err)
+	}
+
+	if len(keywords) == 0 {
+		t.Error("expected keywords from fallback TF-IDF")
+	}
+}
+
+// =====================================================
+// Error Categorization Tests (tests isRetryableError)
+// =====================================================
+
+// TestRateLimitError verifies 429 rate limit error handling.
+func TestRateLimitError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Rate limit exceeded",
+		})
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderOpenAI,
+		APIEndpoint: server.URL,
+		APIKey:      "test-key",
+		ModelName:   "gpt-4",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	// Should fallback to TF-IDF on rate limit
+	summary, err := analyzer.Summarize("Test text.")
+
+	if err != nil {
+		t.Fatalf("Summarize() should fallback on rate limit, got error: %v", err)
+	}
+
+	if summary == "" {
+		t.Error("expected fallback summary on rate limit")
+	}
+}
+
+// TestUnauthorizedError verifies 401 unauthorized error handling.
+func TestUnauthorizedError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid API key",
+		})
+	}))
+	defer server.Close()
+
+	config := &AIConfig{
+		Provider:   AIProviderClaude,
+		APIEndpoint: server.URL,
+		APIKey:      "invalid-key",
+		ModelName:   "claude-3-opus",
+		MaxTokens:   1000,
+	}
+
+	analyzer := NewAIAnalyzer(config)
+
+	// Should fallback to TF-IDF on auth error
+	summary, err := analyzer.Summarize("Test text.")
+
+	if err != nil {
+		t.Fatalf("Summarize() should fallback on auth error, got error: %v", err)
+	}
+
+	if summary == "" {
+		t.Error("expected fallback summary on auth error")
+	}
+}
+
+// =====================================================
 // Graceful Degradation Tests
 // =====================================================
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -70,6 +71,30 @@ func setupTestDB(t *testing.T) *sql.DB {
 			max_retries INTEGER NOT NULL DEFAULT 3,
 			next_retry_at INTEGER NOT NULL,
 			status TEXT NOT NULL DEFAULT 'pending',
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);
+
+		CREATE TABLE ai_config (
+			id TEXT PRIMARY KEY,
+			provider TEXT NOT NULL,
+			api_endpoint TEXT,
+			api_key_encrypted TEXT,
+			model_name TEXT,
+			max_tokens INTEGER,
+			is_enabled INTEGER NOT NULL DEFAULT 1,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);
+
+		CREATE TABLE sync_credentials (
+			id TEXT PRIMARY KEY,
+			endpoint TEXT NOT NULL,
+			bucket_name TEXT NOT NULL,
+			region TEXT,
+			access_key_encrypted TEXT,
+			secret_key_encrypted TEXT,
+			is_enabled INTEGER NOT NULL DEFAULT 1,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL
 		);
@@ -579,5 +604,326 @@ func TestCreateSyncQueue(t *testing.T) {
 	}
 	if entry.CreatedAt == 0 {
 		t.Error("Expected CreatedAt to be set")
+	}
+}
+
+// =====================================================
+// AIConfig Repository Tests
+// =====================================================
+
+func TestSaveAIConfig_create(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	config := &models.AIConfig{
+		Provider:       "openai",
+		APIEndpoint:    "https://api.openai.com/v1",
+		APIKeyEncrypted: "encrypted_key",
+		ModelName:      "gpt-4",
+		MaxTokens:      4096,
+		IsEnabled:      true,
+	}
+
+	err := repo.SaveAIConfig(config)
+	if err != nil {
+		t.Fatalf("SaveAIConfig failed: %v", err)
+	}
+
+	if config.ID == "" {
+		t.Error("Expected ID to be generated")
+	}
+	if config.CreatedAt == 0 {
+		t.Error("Expected CreatedAt to be set")
+	}
+	if config.UpdatedAt == 0 {
+		t.Error("Expected UpdatedAt to be set")
+	}
+}
+
+func TestSaveAIConfig_update(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create a config
+	config := &models.AIConfig{
+		Provider:    "openai",
+		ModelName:   "gpt-4",
+		MaxTokens:   4096,
+		IsEnabled:   true,
+	}
+	err := repo.SaveAIConfig(config)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Update the config
+	config.ModelName = "gpt-4-turbo"
+	config.MaxTokens = 8192
+	originalUpdatedAt := config.UpdatedAt
+
+	// Wait to ensure timestamp changes (time.Now() may return same Unix timestamp)
+	time.Sleep(time.Second)
+
+	err = repo.SaveAIConfig(config)
+	if err != nil {
+		t.Fatalf("SaveAIConfig update failed: %v", err)
+	}
+
+	if config.UpdatedAt == originalUpdatedAt {
+		t.Error("Expected UpdatedAt to change on update")
+	}
+}
+
+func TestGetAIConfig(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create a config
+	config := &models.AIConfig{
+		Provider:       "openai",
+		APIEndpoint:    "https://api.openai.com/v1",
+		APIKeyEncrypted: "encrypted_key",
+		ModelName:      "gpt-4",
+		MaxTokens:      4096,
+		IsEnabled:      true,
+	}
+	err := repo.SaveAIConfig(config)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Retrieve the config
+	retrieved, err := repo.GetAIConfig()
+	if err != nil {
+		t.Fatalf("GetAIConfig failed: %v", err)
+	}
+
+	if retrieved.Provider != config.Provider {
+		t.Errorf("Expected provider %s, got %s", config.Provider, retrieved.Provider)
+	}
+	if retrieved.ModelName != config.ModelName {
+		t.Errorf("Expected model %s, got %s", config.ModelName, retrieved.ModelName)
+	}
+	if retrieved.MaxTokens != config.MaxTokens {
+		t.Errorf("Expected MaxTokens %d, got %d", config.MaxTokens, retrieved.MaxTokens)
+	}
+}
+
+func TestGetAIConfig_notFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	_, err := repo.GetAIConfig()
+	if err == nil {
+		t.Error("Expected error when no AI config exists")
+	}
+}
+
+func TestDeleteAIConfig(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create a config
+	config := &models.AIConfig{
+		Provider:  "openai",
+		ModelName: "gpt-4",
+		IsEnabled: true,
+	}
+	err := repo.SaveAIConfig(config)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Delete the config
+	err = repo.DeleteAIConfig(string(config.ID))
+	if err != nil {
+		t.Fatalf("DeleteAIConfig failed: %v", err)
+	}
+
+	// Verify it's deleted
+	_, err = repo.GetAIConfig()
+	if err == nil {
+		t.Error("Expected error when retrieving deleted config")
+	}
+}
+
+func TestDisableAllAIConfig(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create multiple configs
+	config1 := &models.AIConfig{
+		Provider:  "openai",
+		ModelName: "gpt-4",
+		IsEnabled: true,
+	}
+	config2 := &models.AIConfig{
+		Provider:  "claude",
+		ModelName: "claude-3",
+		IsEnabled: true,
+	}
+
+	repo.SaveAIConfig(config1)
+	repo.SaveAIConfig(config2)
+
+	// Disable all
+	err := repo.DisableAllAIConfig()
+	if err != nil {
+		t.Fatalf("DisableAllAIConfig failed: %v", err)
+	}
+
+	// Verify all are disabled (GetAIConfig should return error)
+	_, err = repo.GetAIConfig()
+	if err == nil {
+		t.Error("Expected error when all configs are disabled")
+	}
+}
+
+// =====================================================
+// SyncCredential Repository Tests
+// =====================================================
+
+func TestSaveSyncCredential(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	cred := &models.SyncCredential{
+		Endpoint:           "https://s3.amazonaws.com",
+		BucketName:         "test-bucket",
+		Region:             "us-east-1",
+		AccessKeyEncrypted: "encrypted_access",
+		SecretKeyEncrypted: "encrypted_secret",
+		IsEnabled:          true,
+	}
+
+	err := repo.SaveSyncCredential(cred)
+	if err != nil {
+		t.Fatalf("SaveSyncCredential failed: %v", err)
+	}
+
+	if cred.ID == "" {
+		t.Error("Expected ID to be generated")
+	}
+	if cred.CreatedAt == 0 {
+		t.Error("Expected CreatedAt to be set")
+	}
+	if cred.UpdatedAt == 0 {
+		t.Error("Expected UpdatedAt to be set")
+	}
+}
+
+func TestGetSyncCredentials(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create a credential
+	cred := &models.SyncCredential{
+		Endpoint:           "https://s3.amazonaws.com",
+		BucketName:         "test-bucket",
+		Region:             "us-east-1",
+		AccessKeyEncrypted: "encrypted_access",
+		SecretKeyEncrypted: "encrypted_secret",
+		IsEnabled:          true,
+	}
+	err := repo.SaveSyncCredential(cred)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Retrieve the credential
+	retrieved, err := repo.GetSyncCredentials()
+	if err != nil {
+		t.Fatalf("GetSyncCredentials failed: %v", err)
+	}
+
+	if retrieved.Endpoint != cred.Endpoint {
+		t.Errorf("Expected endpoint %s, got %s", cred.Endpoint, retrieved.Endpoint)
+	}
+	if retrieved.BucketName != cred.BucketName {
+		t.Errorf("Expected bucket %s, got %s", cred.BucketName, retrieved.BucketName)
+	}
+	if retrieved.Region != cred.Region {
+		t.Errorf("Expected region %s, got %s", cred.Region, retrieved.Region)
+	}
+}
+
+func TestGetSyncCredentials_notFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	_, err := repo.GetSyncCredentials()
+	if err == nil {
+		t.Error("Expected error when no sync credential exists")
+	}
+}
+
+func TestDeleteSyncCredential(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create a credential
+	cred := &models.SyncCredential{
+		Endpoint:   "https://s3.amazonaws.com",
+		BucketName: "test-bucket",
+		IsEnabled:  true,
+	}
+	err := repo.SaveSyncCredential(cred)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Delete the credential
+	err = repo.DeleteSyncCredential(string(cred.ID))
+	if err != nil {
+		t.Fatalf("DeleteSyncCredential failed: %v", err)
+	}
+
+	// Verify it's deleted
+	_, err = repo.GetSyncCredentials()
+	if err == nil {
+		t.Error("Expected error when retrieving deleted credential")
+	}
+}
+
+func TestDisableAllSyncCredentials(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewRepository(db)
+
+	// Create multiple credentials
+	cred1 := &models.SyncCredential{
+		Endpoint:   "https://s3.amazonaws.com",
+		BucketName: "bucket1",
+		IsEnabled:  true,
+	}
+	cred2 := &models.SyncCredential{
+		Endpoint:   "https://s3.amazonaws.com",
+		BucketName: "bucket2",
+		IsEnabled:  true,
+	}
+
+	repo.SaveSyncCredential(cred1)
+	repo.SaveSyncCredential(cred2)
+
+	// Disable all
+	err := repo.DisableAllSyncCredentials()
+	if err != nil {
+		t.Fatalf("DisableAllSyncCredentials failed: %v", err)
+	}
+
+	// Verify all are disabled
+	_, err = repo.GetSyncCredentials()
+	if err == nil {
+		t.Error("Expected error when all credentials are disabled")
 	}
 }

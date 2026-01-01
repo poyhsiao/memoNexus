@@ -4,7 +4,7 @@
 package crypto
 
 /*
-#cgo darwin CFLAGS: -x objective-c
+#cgo darwin CFLAGS: -x objective-c -fobjc-arc
 #cgo darwin LDFLAGS: -framework Foundation -framework Security
 
 #import <Foundation/Foundation.h>

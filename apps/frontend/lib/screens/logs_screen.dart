@@ -201,7 +201,6 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
   String? _selectedFilePath;
   List<LogEntry> _selectedLogEntries = [];
   bool _loadingEntries = false;
-  final Set<String> _selectedLevels = {'error', 'warn', 'info', 'debug'};
 
   @override
   Widget build(BuildContext context) {
