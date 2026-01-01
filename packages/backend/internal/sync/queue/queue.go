@@ -5,11 +5,11 @@ package queue
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
@@ -34,31 +34,39 @@ const (
 
 // QueueItem represents a sync operation in the queue.
 type QueueItem struct {
-	ID           string
-	Operation    Operation
-	Payload      map[string]interface{}
-	RetryCount   int
-	MaxRetries   int
-	NextRetryAt  int64
-	Status       QueueStatus
-	CreatedAt    int64
-	UpdatedAt    int64
-	LastError    string
+	ID          string
+	Operation   Operation
+	Payload     map[string]interface{}
+	RetryCount  int
+	MaxRetries  int
+	NextRetryAt int64
+	Status      QueueStatus
+	CreatedAt   int64
+	UpdatedAt   int64
+	LastError   string
 }
 
 // SyncQueue manages pending sync operations with retry logic.
+// T218: Sync queue for offline operations - queue when network unavailable, process when connection resumes.
 type SyncQueue struct {
-	items    map[string]*QueueItem
-	mu       sync.RWMutex
-	maxSize  int
-	notEmpty  *sync.Cond
+	items       map[string]*QueueItem
+	mu          sync.RWMutex
+	maxSize     int
+	notEmpty    *sync.Cond
+	isOnline    bool
+	onlineCh    chan bool
+	stopCh      chan struct{}
 }
 
 // NewSyncQueue creates a new SyncQueue.
+// T218: Assumes online initially, starts network monitor.
 func NewSyncQueue(maxSize int) *SyncQueue {
 	q := &SyncQueue{
-		items:   make(map[string]*QueueItem),
-		maxSize: maxSize,
+		items:    make(map[string]*QueueItem),
+		maxSize:  maxSize,
+		isOnline: true, // Assume online initially
+		onlineCh: make(chan bool, 1),
+		stopCh:   make(chan struct{}),
 	}
 	q.notEmpty = sync.NewCond(&q.mu)
 	return q
@@ -93,7 +101,11 @@ func (q *SyncQueue) Enqueue(operation Operation, payload map[string]interface{})
 	// Signal that queue is not empty
 	q.notEmpty.Signal()
 
-	log.Printf("[SyncQueue] Enqueued %s operation %s", item.Operation, item.ID)
+	logging.Info("Enqueued sync operation",
+		map[string]interface{}{
+			"operation": item.Operation,
+			"item_id":   item.ID,
+		})
 
 	return item, nil
 }
@@ -124,7 +136,11 @@ func (q *SyncQueue) Dequeue() *QueueItem {
 	readyItem.Status = QueueStatusInProgress
 	readyItem.UpdatedAt = now
 
-	log.Printf("[SyncQueue] Dequeued %s operation %s", readyItem.Operation, readyItem.ID)
+	logging.Info("Dequeued sync operation",
+		map[string]interface{}{
+			"operation": readyItem.Operation,
+			"item_id":   readyItem.ID,
+		})
 
 	return readyItem
 }
@@ -203,7 +219,11 @@ func (q *SyncQueue) Complete(id string) error {
 	// Remove from queue
 	delete(q.items, id)
 
-	log.Printf("[SyncQueue] Completed %s operation %s", item.Operation, id)
+	logging.Info("Completed sync operation",
+		map[string]interface{}{
+			"operation": item.Operation,
+			"item_id":   id,
+		})
 
 	return nil
 }
@@ -225,7 +245,13 @@ func (q *SyncQueue) Failed(id string, err error) error {
 	if item.RetryCount >= item.MaxRetries {
 		// Max retries reached, mark as failed
 		item.Status = QueueStatusFailed
-		log.Printf("[SyncQueue] %s operation %s failed permanently: %v", item.Operation, id, err)
+		logging.Error("Sync operation failed permanently", err,
+			map[string]interface{}{
+				"operation":   item.Operation,
+				"item_id":     id,
+				"retry_count": item.RetryCount,
+				"max_retries": item.MaxRetries,
+			})
 		return fmt.Errorf("max retries (%d) reached: %w", item.MaxRetries, err)
 	}
 
@@ -234,8 +260,15 @@ func (q *SyncQueue) Failed(id string, err error) error {
 	item.NextRetryAt = time.Now().Unix() + int64(backoffSeconds)
 	item.Status = QueueStatusPending
 
-	log.Printf("[SyncQueue] %s operation %s failed, retry %d/%d in %d seconds: %v",
-		item.Operation, id, item.RetryCount, item.MaxRetries, backoffSeconds, err)
+	logging.Warn("Sync operation failed, scheduling retry",
+		map[string]interface{}{
+			"operation":   item.Operation,
+			"item_id":     id,
+			"retry_count": item.RetryCount,
+			"max_retries": item.MaxRetries,
+			"backoff_sec": backoffSeconds,
+			"error":       err.Error(),
+		})
 
 	// Signal that queue has pending items
 	q.notEmpty.Signal()
@@ -247,7 +280,7 @@ func (q *SyncQueue) Failed(id string, err error) error {
 // Formula: 2^retry_count * 60, capped at 3600 seconds (1 hour).
 func calculateBackoff(retryCount int) int64 {
 	backoff := int64(1) << uint(retryCount) // 2^retry_count
-	backoff = backoff * 60                   // Convert to seconds
+	backoff = backoff * 60                  // Convert to seconds
 
 	// Cap at 1 hour
 	maxBackoff := int64(3600)
@@ -319,7 +352,7 @@ func (q *SyncQueue) Clear() {
 
 	q.items = make(map[string]*QueueItem)
 
-	log.Printf("[SyncQueue] Queue cleared")
+	logging.Info("Sync queue cleared", nil)
 }
 
 // Remove removes a specific item from the queue.
@@ -356,7 +389,8 @@ func (q *SyncQueue) RetryAll() int {
 
 	if count > 0 {
 		q.notEmpty.Signal()
-		log.Printf("[SyncQueue] Reset %d failed items for retry", count)
+		logging.Info("Reset failed items for retry",
+			map[string]interface{}{"count": count})
 	}
 
 	return count
@@ -368,11 +402,11 @@ func (q *SyncQueue) GetStats() map[string]int {
 	defer q.mu.RUnlock()
 
 	stats := map[string]int{
-		"total":     0,
-		"pending":   0,
+		"total":       0,
+		"pending":     0,
 		"in_progress": 0,
-		"failed":    0,
-		"completed": 0,
+		"failed":      0,
+		"completed":   0,
 	}
 
 	for _, item := range q.items {
@@ -390,6 +424,121 @@ func (q *SyncQueue) GetStats() map[string]int {
 	}
 
 	return stats
+}
+
+// =====================================================
+// Network Status Management (T218)
+// =====================================================
+
+// SetOnlineStatus changes the online status of the queue.
+// When coming back online, triggers processing of pending items.
+// T218: Process queue when connection resumes.
+func (q *SyncQueue) SetOnlineStatus(isOnline bool) {
+	q.mu.Lock()
+	wasOnline := q.isOnline
+	q.isOnline = isOnline
+	q.mu.Unlock()
+
+	// Log status change
+	logging.Info("Sync queue network status changed",
+		map[string]interface{}{
+			"was_online": wasOnline,
+			"is_online":  isOnline,
+		})
+
+	// If coming back online and we have pending items, notify
+	if !wasOnline && isOnline {
+		q.mu.Lock()
+		hasPending := len(q.GetPending()) > 0
+		if hasPending {
+			q.notEmpty.Signal()
+		}
+		q.mu.Unlock()
+
+		logging.Info("Network restored, pending queue items ready for processing",
+			map[string]interface{}{
+				"pending_count": len(q.GetPending()),
+			})
+	}
+}
+
+// IsOnline returns whether the queue is in online mode.
+func (q *SyncQueue) IsOnline() bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.isOnline
+}
+
+// ProcessOnReconnect processes pending items when connection is restored.
+// T218: Called when network becomes available to process queued operations.
+func (q *SyncQueue) ProcessOnReconnect() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	now := time.Now().Unix()
+	count := 0
+
+	for _, item := range q.items {
+		// Reset items that were waiting for network to be immediately ready
+		if item.Status == QueueStatusPending && item.NextRetryAt > now {
+			item.NextRetryAt = now
+			item.UpdatedAt = now
+			count++
+		}
+	}
+
+	if count > 0 {
+		q.notEmpty.Signal()
+		logging.Info("Reset pending items for immediate processing on reconnect",
+			map[string]interface{}{
+				"count": count,
+			})
+	}
+
+	return count
+}
+
+// QueueWhenOffline adds an operation to the queue with offline handling.
+// If offline, immediately queues without attempting sync.
+// If online, can optionally attempt immediate sync (not implemented here).
+// T218: Queue operations when network unavailable.
+func (q *SyncQueue) QueueWhenOffline(operation Operation, payload map[string]interface{}) (*QueueItem, error) {
+	q.mu.Lock()
+	isOnline := q.isOnline
+	q.mu.Unlock()
+
+	// Always enqueue - the scheduler will handle processing
+	item, err := q.Enqueue(operation, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isOnline {
+		logging.Info("Queued operation for offline processing",
+			map[string]interface{}{
+				"operation": item.Operation,
+				"item_id":   item.ID,
+			})
+	}
+
+	return item, nil
+}
+
+// Stop stops the queue and releases resources.
+func (q *SyncQueue) Stop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	select {
+	case <-q.stopCh:
+		// Already stopped
+		return
+	default:
+		close(q.stopCh)
+		q.notEmpty.Broadcast()
+	}
+
+	logging.Info("Sync queue stopped", nil)
 }
 
 // ToModel converts a QueueItem to a SyncQueue model for database storage.

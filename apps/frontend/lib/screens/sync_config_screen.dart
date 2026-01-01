@@ -331,7 +331,7 @@ class _ProviderDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: const InputDecoration(
         labelText: 'Storage Provider',
         border: OutlineInputBorder(),

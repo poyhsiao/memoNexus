@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 )
 
 // Note: CJK detection functions are now in the textrank package.
@@ -55,6 +59,7 @@ func NewAIAnalyzer(config *AIConfig) *AIAnalyzer {
 
 // Summarize generates an AI summary for the content.
 // Falls back to TF-IDF if AI service fails.
+// T216: AI service failure handling with error categorization.
 func (a *AIAnalyzer) Summarize(text string) (string, error) {
 	if text == "" {
 		return "", nil
@@ -63,12 +68,27 @@ func (a *AIAnalyzer) Summarize(text string) (string, error) {
 	// Try AI summarization
 	summary, err := a.aiSummarize(text)
 	if err != nil {
+		// Categorize and log the error
+		errorCode := a.categorizeError(err)
+
+		logging.ErrorWithCode("AI summarization failed, falling back to TF-IDF",
+			string(errorCode), err,
+			map[string]interface{}{
+				"provider": a.config.Provider,
+				"model":    a.config.ModelName,
+				"text_len": len(text),
+			})
+
 		// Fallback to TF-IDF
 		result, _ := a.fallback.Analyze(text)
 		if result.Summary != "" {
+			logging.Info("TF-IDF fallback summary generated",
+				map[string]interface{}{
+					"summary_len": len(result.Summary),
+				})
 			return result.Summary, nil
 		}
-		return "", err
+		return "", fmt.Errorf("both AI and TF-IDF summarization failed: %w", err)
 	}
 
 	return summary, nil
@@ -76,6 +96,7 @@ func (a *AIAnalyzer) Summarize(text string) (string, error) {
 
 // ExtractKeywords extracts keywords using AI.
 // Falls back to TF-IDF if AI service fails.
+// T216: AI service failure handling with error categorization.
 func (a *AIAnalyzer) ExtractKeywords(text string) ([]string, error) {
 	if text == "" {
 		return []string{}, nil
@@ -84,9 +105,27 @@ func (a *AIAnalyzer) ExtractKeywords(text string) ([]string, error) {
 	// Try AI keyword extraction
 	keywords, err := a.aiExtractKeywords(text)
 	if err != nil {
+		// Categorize and log the error
+		errorCode := a.categorizeError(err)
+
+		logging.ErrorWithCode("AI keyword extraction failed, falling back to TF-IDF",
+			string(errorCode), err,
+			map[string]interface{}{
+				"provider": a.config.Provider,
+				"model":    a.config.ModelName,
+				"text_len": len(text),
+			})
+
 		// Fallback to TF-IDF
 		result, _ := a.fallback.Analyze(text)
-		return result.Keywords, nil
+		if len(result.Keywords) > 0 {
+			logging.Info("TF-IDF fallback keywords generated",
+				map[string]interface{}{
+					"keyword_count": len(result.Keywords),
+				})
+			return result.Keywords, nil
+		}
+		return []string{}, fmt.Errorf("both AI and TF-IDF keyword extraction failed: %w", err)
 	}
 
 	return keywords, nil
@@ -175,8 +214,9 @@ func (a *AIAnalyzer) summarizeOpenAI(text string) (string, error) {
 		return "", err
 	}
 
+	// T216: Check for API-level errors
 	if resp.Error != nil {
-		return "", fmt.Errorf("OpenAI API error: %s", resp.Error.Message)
+		return "", fmt.Errorf("OpenAI API error: %s (%s)", resp.Error.Message, resp.Error.Type)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -213,8 +253,9 @@ func (a *AIAnalyzer) extractKeywordsOpenAI(text string) ([]string, error) {
 		return nil, err
 	}
 
+	// T216: Check for API-level errors
 	if resp.Error != nil {
-		return nil, fmt.Errorf("OpenAI API error: %s", resp.Error.Message)
+		return nil, fmt.Errorf("OpenAI API error: %s (%s)", resp.Error.Message, resp.Error.Type)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -248,7 +289,18 @@ func (a *AIAnalyzer) doOpenAIRequest(reqBody openAIRequest) (*openAIResponse, er
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("OpenAI API returned %d: %s", resp.StatusCode, string(body))
+
+		// T216: Categorize HTTP errors
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return nil, fmt.Errorf("OpenAI API 401 Unauthorized: invalid API key")
+		case http.StatusForbidden:
+			return nil, fmt.Errorf("OpenAI API 403 Forbidden: access denied")
+		case http.StatusTooManyRequests:
+			return nil, fmt.Errorf("OpenAI API 429: rate limit exceeded")
+		default:
+			return nil, fmt.Errorf("OpenAI API returned %d: %s", resp.StatusCode, string(body))
+		}
 	}
 
 	var openAIResp openAIResponse
@@ -301,8 +353,9 @@ func (a *AIAnalyzer) summarizeClaude(text string) (string, error) {
 		return "", err
 	}
 
+	// T216: Check for API-level errors
 	if resp.Error != nil {
-		return "", fmt.Errorf("Claude API error: %s", resp.Error.Message)
+		return "", fmt.Errorf("Claude API error: %s (%s)", resp.Error.Message, resp.Error.Type)
 	}
 
 	if len(resp.Content) == 0 {
@@ -335,8 +388,9 @@ func (a *AIAnalyzer) extractKeywordsClaude(text string) ([]string, error) {
 		return nil, err
 	}
 
+	// T216: Check for API-level errors
 	if resp.Error != nil {
-		return nil, fmt.Errorf("Claude API error: %s", resp.Error.Message)
+		return nil, fmt.Errorf("Claude API error: %s (%s)", resp.Error.Message, resp.Error.Type)
 	}
 
 	if len(resp.Content) == 0 {
@@ -369,7 +423,18 @@ func (a *AIAnalyzer) doClaudeRequest(reqBody claudeRequest) (*claudeResponse, er
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Claude API returned %d: %s", resp.StatusCode, string(body))
+
+		// T216: Categorize HTTP errors
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return nil, fmt.Errorf("Claude API 401 Unauthorized: invalid API key")
+		case http.StatusForbidden:
+			return nil, fmt.Errorf("Claude API 403 Forbidden: access denied")
+		case http.StatusTooManyRequests:
+			return nil, fmt.Errorf("Claude API 429: rate limit exceeded")
+		default:
+			return nil, fmt.Errorf("Claude API returned %d: %s", resp.StatusCode, string(body))
+		}
 	}
 
 	var claudeResp claudeResponse
@@ -459,12 +524,14 @@ func (a *AIAnalyzer) doOllamaRequest(reqBody ollamaRequest) (*ollamaResponse, er
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
+		// T216: Local service errors are typically network/timeout related
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		// T216: Ollama error handling - local service issues
 		return nil, fmt.Errorf("Ollama returned %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -493,4 +560,51 @@ func parseCommaSeparatedList(s string) []string {
 	}
 
 	return result
+}
+
+// =====================================================
+// Error Handling (T216)
+// =====================================================
+
+// categorizeError categorizes an error into an appropriate error code.
+// T216: AI service failure handling with timeout, rate limit, and credential detection.
+func (a *AIAnalyzer) categorizeError(err error) errors.ErrorCode {
+	if err == nil {
+		return errors.ErrAIFailed
+	}
+
+	// Check for timeout errors
+	if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+		return errors.ErrAITimeout
+	}
+
+	// Check for URL errors (network connectivity)
+	if _, ok := err.(*url.Error); ok {
+		return errors.ErrAIFailed
+	}
+
+	// Parse error message for HTTP status codes
+	errMsg := err.Error()
+
+	// Rate limit detection (HTTP 429)
+	if strings.Contains(errMsg, "429") || strings.Contains(errMsg, "rate limit") {
+		return errors.ErrAIRateLimit
+	}
+
+	// Invalid credentials detection (HTTP 401, 403)
+	if strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") ||
+		strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "forbidden") ||
+		strings.Contains(errMsg, "invalid API key") || strings.Contains(errMsg, "authentication") {
+		return errors.ErrAIInvalidCredentials
+	}
+
+	// Default: general AI failure
+	return errors.ErrAIFailed
+}
+
+// isRetryableError determines if an error is retryable.
+// T216: Rate limit and timeout errors are retryable; credential errors are not.
+func (a *AIAnalyzer) isRetryableError(err error) bool {
+	code := a.categorizeError(err)
+	return code == errors.ErrAIRateLimit || code == errors.ErrAITimeout
 }

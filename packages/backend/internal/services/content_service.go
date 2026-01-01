@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kimhsiao/memonexus/backend/internal/db"
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 	"github.com/kimhsiao/memonexus/backend/internal/parser"
 	"github.com/kimhsiao/memonexus/backend/internal/parser/storage"
@@ -21,7 +23,6 @@ type ContentService struct {
 	repo    *db.Repository
 	parser  *parser.ParserService
 	storage *storage.StorageManager
-	logger  *log.Logger
 }
 
 // NewContentService creates a new ContentService.
@@ -36,42 +37,64 @@ func NewContentService(database *sql.DB, storageDir string) (*ContentService, er
 	// Initialize storage manager
 	store, err := storage.NewStorageManager(storageDir)
 	if err != nil {
+		logging.ErrorWithCode("Failed to initialize storage", string(errors.ErrInternal), err,
+			map[string]interface{}{"storage_dir": storageDir})
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
-
-	// Initialize logger
-	logger := log.New(log.Writer(), "[ContentService] ", log.LstdFlags|log.Lmsgprefix)
 
 	return &ContentService{
 		repo:    repo,
 		parser:  parserSvc,
 		storage: store,
-		logger:  logger,
 	}, nil
 }
 
 // CreateFromURL creates a content item from a URL.
+// T211: Critical operations logging with correlation ID.
 func (s *ContentService) CreateFromURL(sourceURL string) (*models.ContentItem, error) {
 	startTime := time.Now()
-	s.logger.Printf("Starting content ingestion from URL: %s", sourceURL)
+	correlationID := uuid.New().String()
+
+	logging.Info("Content ingestion started",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"url":            sourceURL,
+		})
 
 	// Validate URL
 	parsedURL, err := url.Parse(sourceURL)
 	if err != nil {
-		s.logger.Printf("URL validation failed: %v", err)
+		logging.ErrorWithCode("URL validation failed", string(errors.ErrInvalid), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"url":            sourceURL,
+			})
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 
 	// Parse content from URL
-	s.logger.Printf("Fetching and parsing content from: %s", parsedURL.Host)
+	logging.Info("Fetching and parsing content",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"host":           parsedURL.Host,
+		})
 	result, err := s.parser.ParseURL(sourceURL)
 	if err != nil {
-		s.logger.Printf("Parse error for URL %s: %v", sourceURL, err)
+		logging.ErrorWithCode("Failed to parse URL", string(errors.ErrContentInvalid), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"url":            sourceURL,
+			})
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	s.logger.Printf("Content parsed: title='%s' (%d words, type=%s)",
-		result.Title, result.WordCount, result.MediaType)
+	logging.Info("Content parsed successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"title":          result.Title,
+			"word_count":     result.WordCount,
+			"media_type":     result.MediaType,
+		})
 
 	// Check for duplicate content using SHA-256 hash
 	var contentHash string
@@ -79,17 +102,29 @@ func (s *ContentService) CreateFromURL(sourceURL string) (*models.ContentItem, e
 		var err error
 		contentHash, err = storage.CalculateHash(strings.NewReader(result.ContentText))
 		if err != nil {
-			s.logger.Printf("Hash calculation failed: %v", err)
+			logging.ErrorWithCode("Hash calculation failed", string(errors.ErrInternal), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+					"url":            sourceURL,
+				})
 			return nil, fmt.Errorf("failed to calculate hash: %w", err)
 		}
 
-		s.logger.Printf("Content hash calculated: %s (first 12 chars)", contentHash[:12])
+		logging.Debug("Content hash calculated",
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"hash_prefix":    contentHash[:12],
+			})
 
 		// Check if content already exists (duplicate detection)
 		existing, err := s.findByContentHash(contentHash)
 		if err == nil && existing != nil {
-			s.logger.Printf("Duplicate content detected! Existing item: %s (created: %d)",
-				existing.ID, existing.CreatedAt)
+			logging.Warn("Duplicate content detected",
+				map[string]interface{}{
+					"correlation_id": correlationID,
+					"existing_id":    existing.ID,
+					"created_at":     existing.CreatedAt,
+				})
 			return existing, fmt.Errorf("duplicate content: already exists as item %s", existing.ID)
 		}
 	}
@@ -106,43 +141,76 @@ func (s *ContentService) CreateFromURL(sourceURL string) (*models.ContentItem, e
 	}
 
 	if err := s.repo.CreateContentItem(item); err != nil {
-		s.logger.Printf("Database insert failed: %v", err)
+		logging.ErrorWithCode("Failed to create content item", string(errors.ErrDatabase), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"title":          result.Title,
+			})
 		return nil, fmt.Errorf("failed to create content item: %w", err)
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Printf("Content ingestion completed successfully: id=%s title='%s' duration=%dms",
-		item.ID, item.Title, duration.Milliseconds())
+	logging.Info("Content ingestion completed successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"id":             item.ID,
+			"title":          item.Title,
+			"duration_ms":    duration.Milliseconds(),
+		})
 
 	return item, nil
 }
 
 // CreateFromFile creates a content item from a file upload.
+// T211: Critical operations logging with correlation ID.
 func (s *ContentService) CreateFromFile(filename string, reader io.Reader) (*models.ContentItem, error) {
 	startTime := time.Now()
-	s.logger.Printf("Starting file ingestion: filename='%s'", filename)
+	correlationID := uuid.New().String()
+
+	logging.Info("File ingestion started",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"filename":       filename,
+		})
 
 	// Store file in content-addressed storage
 	contentHash, size, err := s.storage.StoreFile(reader)
 	if err != nil {
-		s.logger.Printf("Storage failed for file '%s': %v", filename, err)
+		logging.ErrorWithCode("Failed to store file", string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"filename":       filename,
+			})
 		return nil, fmt.Errorf("failed to store file: %w", err)
 	}
 
-	s.logger.Printf("File stored: hash=%s (first 12 chars) size=%d bytes",
-		contentHash[:12], size)
+	logging.Info("File stored successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"hash_prefix":    contentHash[:12],
+			"size_bytes":     size,
+		})
 
 	// Check for duplicate file (same content hash)
 	existing, err := s.findByContentHash(contentHash)
 	if err == nil && existing != nil {
-		s.logger.Printf("Duplicate file detected! Existing item: %s (filename='%s')",
-			existing.ID, existing.Title)
+		logging.Warn("Duplicate file detected",
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"existing_id":    existing.ID,
+				"existing_title": existing.Title,
+			})
 		return existing, fmt.Errorf("duplicate file: already exists as item %s", existing.ID)
 	}
 
 	// Detect media type from filename
 	mediaType := s.detectMediaTypeFromPath(filename)
-	s.logger.Printf("Detected media type: %s", mediaType)
+	logging.Debug("Detected media type",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"filename":       filename,
+			"media_type":     mediaType,
+		})
 
 	// Create content item
 	item := &models.ContentItem{
@@ -155,13 +223,22 @@ func (s *ContentService) CreateFromFile(filename string, reader io.Reader) (*mod
 	}
 
 	if err := s.repo.CreateContentItem(item); err != nil {
-		s.logger.Printf("Database insert failed: %v", err)
+		logging.ErrorWithCode("Failed to create content item", string(errors.ErrDatabase), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"filename":       filename,
+			})
 		return nil, fmt.Errorf("failed to create content item: %w", err)
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Printf("File ingestion completed: id=%s filename='%s' duration=%dms",
-		item.ID, filename, duration.Milliseconds())
+	logging.Info("File ingestion completed successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"id":             item.ID,
+			"filename":       filename,
+			"duration_ms":    duration.Milliseconds(),
+		})
 
 	return item, nil
 }
@@ -205,8 +282,11 @@ func (s *ContentService) findByContentHash(contentHash string) (*models.ContentI
 	// Search for matching content hash
 	for _, item := range items {
 		if item.ContentHash == contentHash {
-			s.logger.Printf("Found duplicate by hash: %s matches item %s",
-				contentHash[:12], item.ID)
+			logging.Debug("Found duplicate by hash",
+				map[string]interface{}{
+					"hash_prefix": contentHash[:12],
+					"existing_id": item.ID,
+				})
 			return item, nil
 		}
 	}

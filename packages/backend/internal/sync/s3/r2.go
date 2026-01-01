@@ -45,7 +45,7 @@ func NewR2Client(config *R2Config) *sync.S3Client {
 		AccessKey:      config.AccessKey,
 		SecretKey:      config.SecretKey,
 		Region:         "auto", // R2 doesn't use regions like AWS
-		ForcePathStyle: false, // Virtual-host style for R2
+		ForcePathStyle: false,  // Virtual-host style for R2
 	})
 }
 

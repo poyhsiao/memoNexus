@@ -9,9 +9,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	stderrors "errors"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,9 +19,12 @@ import (
 	"sort"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/pbkdf2"
 
 	"github.com/kimhsiao/memonexus/backend/internal/db"
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
@@ -45,7 +48,7 @@ type ExportConfig struct {
 // ImportConfig holds import configuration.
 type ImportConfig struct {
 	ArchivePath string
-	Password     string // For decryption
+	Password    string // For decryption
 }
 
 // ExportManifest represents the export manifest metadata.
@@ -76,12 +79,28 @@ type ImportResult struct {
 }
 
 // Export creates an encrypted export archive of all data.
+// T211: Critical operations logging (start/complete/success/failure).
 func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 	startTime := time.Now()
+	correlationID := uuid.New().String()
+
+	// Log operation start
+	logging.Info("Export operation started",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"output_path":    config.OutputPath,
+			"include_media":  config.IncludeMedia,
+			"encryption":     config.Password != "",
+		})
 
 	// Create temporary directory
 	tempDir, err := os.MkdirTemp("", "memonexus-export-*")
 	if err != nil {
+		logging.ErrorWithCode("Export failed: temp directory creation",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
@@ -98,6 +117,11 @@ func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 	dataFile := filepath.Join(tempDir, "data.json")
 	itemCount, checksum, err := s.createDataFile(dataFile)
 	if err != nil {
+		logging.ErrorWithCode("Export failed: data file creation",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to create data file: %w", err)
 	}
 
@@ -107,6 +131,11 @@ func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 	// Create manifest file
 	manifestFile := filepath.Join(tempDir, "manifest.json")
 	if err := s.writeManifest(manifestFile, &manifest); err != nil {
+		logging.ErrorWithCode("Export failed: manifest write",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to write manifest: %w", err)
 	}
 
@@ -119,12 +148,23 @@ func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 
 	// Ensure exports directory exists
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0755); err != nil {
+		logging.ErrorWithCode("Export failed: exports directory creation",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+				"archive_path":   archivePath,
+			})
 		return nil, fmt.Errorf("failed to create exports directory: %w", err)
 	}
 
 	// Create archive (tar.gz)
 	plainPath := archivePath + ".plain.tmp"
 	if err := writeTarGz(tempDir, plainPath); err != nil {
+		logging.ErrorWithCode("Export failed: archive creation",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to create tar.gz: %w", err)
 	}
 	defer os.Remove(plainPath)
@@ -137,10 +177,20 @@ func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 		// No encryption, just rename
 		finalPath = archivePath
 		if err := os.Rename(plainPath, finalPath); err != nil {
+			logging.ErrorWithCode("Export failed: archive move",
+				string(errors.ErrInternal), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+				})
 			return nil, fmt.Errorf("failed to move archive: %w", err)
 		}
 		info, err := os.Stat(finalPath)
 		if err != nil {
+			logging.ErrorWithCode("Export failed: archive stat",
+				string(errors.ErrInternal), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+				})
 			return nil, fmt.Errorf("failed to stat archive: %w", err)
 		}
 		sizeBytes = info.Size()
@@ -149,27 +199,61 @@ func (s *ExportService) Export(config *ExportConfig) (*ExportResult, error) {
 		finalPath = archivePath
 		sizeBytes, err = encryptFile(plainPath, finalPath, config.Password)
 		if err != nil {
+			logging.ErrorWithCode("Export failed: encryption",
+				string(errors.ErrCryptoFailed), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+				})
 			return nil, fmt.Errorf("failed to encrypt archive: %w", err)
 		}
 	}
 
-	return &ExportResult{
+	result := &ExportResult{
 		FilePath:  finalPath,
 		SizeBytes: sizeBytes,
 		ItemCount: itemCount,
 		Checksum:  checksum,
 		Encrypted: config.Password != "",
 		Duration:  time.Since(startTime),
-	}, nil
+	}
+
+	// Log successful completion
+	logging.Info("Export operation completed successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"file_path":      result.FilePath,
+			"size_bytes":     result.SizeBytes,
+			"item_count":     result.ItemCount,
+			"checksum":       result.Checksum,
+			"encrypted":      result.Encrypted,
+			"duration_ms":    result.Duration.Milliseconds(),
+		})
+
+	return result, nil
 }
 
 // Import imports data from an encrypted export archive.
+// T211: Critical operations logging (start/complete/success/failure).
 func (s *ExportService) Import(config *ImportConfig) (*ImportResult, error) {
 	startTime := time.Now()
+	correlationID := uuid.New().String()
+
+	// Log operation start
+	logging.Info("Import operation started",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"archive_path":   config.ArchivePath,
+			"encrypted":      config.Password != "",
+		})
 
 	// Create temporary directory
 	tempDir, err := os.MkdirTemp("", "memonexus-import-*")
 	if err != nil {
+		logging.ErrorWithCode("Import failed: temp directory creation",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
@@ -178,12 +262,22 @@ func (s *ExportService) Import(config *ImportConfig) (*ImportResult, error) {
 	plainArchivePath := filepath.Join(tempDir, "archive.tar.gz")
 	if config.Password != "" {
 		if err := decryptFile(config.ArchivePath, plainArchivePath, config.Password); err != nil {
+			logging.ErrorWithCode("Import failed: decryption",
+				string(errors.ErrCryptoFailed), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+				})
 			return nil, fmt.Errorf("failed to decrypt archive: %w", err)
 		}
 		defer os.Remove(plainArchivePath)
 	} else {
 		// Just copy the file
 		if err := copyFile(config.ArchivePath, plainArchivePath); err != nil {
+			logging.ErrorWithCode("Import failed: archive copy",
+				string(errors.ErrInternal), err,
+				map[string]interface{}{
+					"correlation_id": correlationID,
+				})
 			return nil, fmt.Errorf("failed to copy archive: %w", err)
 		}
 		defer os.Remove(plainArchivePath)
@@ -191,32 +285,64 @@ func (s *ExportService) Import(config *ImportConfig) (*ImportResult, error) {
 
 	// Extract tar.gz
 	if err := extractTarGz(plainArchivePath, tempDir); err != nil {
+		logging.ErrorWithCode("Import failed: archive extraction",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to extract archive: %w", err)
 	}
 
 	// Read manifest
 	manifest, err := s.readManifest(filepath.Join(tempDir, "manifest.json"))
 	if err != nil {
+		logging.ErrorWithCode("Import failed: manifest read",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
 
 	// Verify checksum
 	dataFilePath := filepath.Join(tempDir, "data.json")
 	if err := verifyChecksum(dataFilePath, manifest.Checksum); err != nil {
+		logging.ErrorWithCode("Import failed: checksum verification",
+			string(errors.ErrValidation), err,
+			map[string]interface{}{
+				"correlation_id":    correlationID,
+				"expected_checksum": manifest.Checksum,
+			})
 		return nil, fmt.Errorf("checksum verification failed: %w", err)
 	}
 
 	// Import data
 	importedCount, skippedCount, err := s.importDataFile(dataFilePath)
 	if err != nil {
+		logging.ErrorWithCode("Import failed: data import",
+			string(errors.ErrInternal), err,
+			map[string]interface{}{
+				"correlation_id": correlationID,
+			})
 		return nil, fmt.Errorf("failed to import data: %w", err)
 	}
 
-	return &ImportResult{
+	result := &ImportResult{
 		ImportedCount: importedCount,
 		SkippedCount:  skippedCount,
 		Duration:      time.Since(startTime),
-	}, nil
+	}
+
+	// Log successful completion
+	logging.Info("Import operation completed successfully",
+		map[string]interface{}{
+			"correlation_id": correlationID,
+			"imported_count": result.ImportedCount,
+			"skipped_count":  result.SkippedCount,
+			"duration_ms":    result.Duration.Milliseconds(),
+		})
+
+	return result, nil
 }
 
 // createDataFile creates the data JSON file with all items.
@@ -319,7 +445,7 @@ func (s *ExportService) itemExists(id models.UUID) (bool, error) {
 	}
 	// Check if it's a "not found" error (sql.ErrNoRows)
 	// All other errors should be propagated
-	if errors.Is(err, sql.ErrNoRows) {
+	if stderrors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return false, err
@@ -589,13 +715,13 @@ func copyFile(src, dst string) error {
 
 // ArchiveInfo represents metadata about an export archive.
 type ArchiveInfo struct {
-	ID         string    `json:"id"`
-	FilePath   string    `json:"file_path"`
-	Checksum   string    `json:"checksum"`
-	SizeBytes  int64     `json:"size_bytes"`
-	ItemCount  int       `json:"item_count"`
-	CreatedAt  time.Time `json:"created_at"`
-	Encrypted  bool      `json:"encrypted"`
+	ID        string    `json:"id"`
+	FilePath  string    `json:"file_path"`
+	Checksum  string    `json:"checksum"`
+	SizeBytes int64     `json:"size_bytes"`
+	ItemCount int       `json:"item_count"`
+	CreatedAt time.Time `json:"created_at"`
+	Encrypted bool      `json:"encrypted"`
 }
 
 // ListArchives returns all export archives in the exports directory.
@@ -688,4 +814,4 @@ func (s *ExportService) ApplyRetentionPolicy(exportDir string, retentionCount in
 }
 
 // ErrNotFound is returned when an item is not found.
-var ErrNotFound = errors.New("item not found")
+var ErrNotFound = stderrors.New("item not found")

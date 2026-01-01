@@ -14,16 +14,19 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 )
 
 // S3Config holds S3 connection configuration.
 type S3Config struct {
-	Endpoint        string
-	BucketName      string
-	AccessKey       string
-	SecretKey       string
-	Region          string
-	ForcePathStyle  bool // Use path-style URLs (minio, localstack)
+	Endpoint       string
+	BucketName     string
+	AccessKey      string
+	SecretKey      string
+	Region         string
+	ForcePathStyle bool // Use path-style URLs (minio, localstack)
 }
 
 // S3Client implements ObjectStore for S3-compatible storage.
@@ -34,9 +37,9 @@ type S3Client struct {
 
 // ListBucketResult represents the S3 ListObjectsV2 response.
 type ListBucketResult struct {
-	XMLName xml.Name `xml:"ListBucketResult"`
-	Name    string   `xml:"Name"`
-	Prefix  string   `xml:"Prefix"`
+	XMLName  xml.Name `xml:"ListBucketResult"`
+	Name     string   `xml:"Name"`
+	Prefix   string   `xml:"Prefix"`
 	Contents []struct {
 		Key          string `xml:"Key"`
 		LastModified string `xml:"LastModified"`
@@ -46,7 +49,7 @@ type ListBucketResult struct {
 
 // LocationConstraint represents the S3 GetBucketLocation response.
 type LocationConstraint struct {
-	XMLName          xml.Name `xml:"LocationConstraint"`
+	XMLName            xml.Name `xml:"LocationConstraint"`
 	LocationConstraint string   `xml:",chardata"`
 }
 
@@ -66,6 +69,7 @@ func NewS3Client(config *S3Config) *S3Client {
 }
 
 // Upload uploads data to S3.
+// T217: S3 service failure handling with error categorization.
 func (c *S3Client) Upload(ctx context.Context, key string, data []byte) error {
 	// Create PUT request
 	req, err := c.createRequest(ctx, http.MethodPut, key, bytes.NewReader(data))
@@ -79,12 +83,34 @@ func (c *S3Client) Upload(ctx context.Context, key string, data []byte) error {
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// T217: Categorize network errors
+		errorCode := c.categorizeError(err)
+
+		logging.ErrorWithCode("S3 upload request failed",
+			string(errorCode), err,
+			map[string]interface{}{
+				"key":  key,
+				"size": len(data),
+			})
+
 		return fmt.Errorf("upload request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// T217: Categorize HTTP errors
+		errorCode := c.categorizeHTTPError(resp.StatusCode, string(body))
+
+		logging.ErrorWithCode("S3 upload failed",
+			string(errorCode), nil,
+			map[string]interface{}{
+				"key":        key,
+				"status":     resp.StatusCode,
+				"body_prefix": truncateString(string(body), 200),
+			})
+
 		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -92,6 +118,7 @@ func (c *S3Client) Upload(ctx context.Context, key string, data []byte) error {
 }
 
 // Download downloads data from S3.
+// T217: S3 service failure handling with error categorization.
 func (c *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	// Create GET request
 	req, err := c.createRequest(ctx, http.MethodGet, key, nil)
@@ -102,22 +129,51 @@ func (c *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// T217: Categorize network errors
+		errorCode := c.categorizeError(err)
+
+		logging.ErrorWithCode("S3 download request failed",
+			string(errorCode), err,
+			map[string]interface{}{
+				"key": key,
+			})
+
 		return nil, fmt.Errorf("download request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		logging.Debug("S3 object not found",
+			map[string]interface{}{
+				"key": key,
+			})
 		return nil, fmt.Errorf("object not found: %s", key)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// T217: Categorize HTTP errors
+		errorCode := c.categorizeHTTPError(resp.StatusCode, string(body))
+
+		logging.ErrorWithCode("S3 download failed",
+			string(errorCode), nil,
+			map[string]interface{}{
+				"key":         key,
+				"status":      resp.StatusCode,
+				"body_prefix": truncateString(string(body), 200),
+			})
+
 		return nil, fmt.Errorf("download failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Read response body
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logging.Error("Failed to read S3 response body", err,
+			map[string]interface{}{
+				"key": key,
+			})
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -125,6 +181,7 @@ func (c *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 }
 
 // Delete deletes data from S3.
+// T217: S3 service failure handling with error categorization.
 func (c *S3Client) Delete(ctx context.Context, key string) error {
 	// Create DELETE request
 	req, err := c.createRequest(ctx, http.MethodDelete, key, nil)
@@ -135,12 +192,33 @@ func (c *S3Client) Delete(ctx context.Context, key string) error {
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// T217: Categorize network errors
+		errorCode := c.categorizeError(err)
+
+		logging.ErrorWithCode("S3 delete request failed",
+			string(errorCode), err,
+			map[string]interface{}{
+				"key": key,
+			})
+
 		return fmt.Errorf("delete request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// T217: Categorize HTTP errors
+		errorCode := c.categorizeHTTPError(resp.StatusCode, string(body))
+
+		logging.ErrorWithCode("S3 delete failed",
+			string(errorCode), nil,
+			map[string]interface{}{
+				"key":         key,
+				"status":      resp.StatusCode,
+				"body_prefix": truncateString(string(body), 200),
+			})
+
 		return fmt.Errorf("delete failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -148,6 +226,7 @@ func (c *S3Client) Delete(ctx context.Context, key string) error {
 }
 
 // List lists all objects with a prefix.
+// T217: S3 service failure handling with error categorization.
 func (c *S3Client) List(ctx context.Context, prefix string) ([]string, error) {
 	// Create ListObjectsV2 request
 	// Note: For bucket-level operations like ListObjectsV2, the key is empty
@@ -165,18 +244,43 @@ func (c *S3Client) List(ctx context.Context, prefix string) ([]string, error) {
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// T217: Categorize network errors
+		errorCode := c.categorizeError(err)
+
+		logging.ErrorWithCode("S3 list request failed",
+			string(errorCode), err,
+			map[string]interface{}{
+				"prefix": prefix,
+			})
+
 		return nil, fmt.Errorf("list request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// T217: Categorize HTTP errors
+		errorCode := c.categorizeHTTPError(resp.StatusCode, string(body))
+
+		logging.ErrorWithCode("S3 list failed",
+			string(errorCode), nil,
+			map[string]interface{}{
+				"prefix":      prefix,
+				"status":      resp.StatusCode,
+				"body_prefix": truncateString(string(body), 200),
+			})
+
 		return nil, fmt.Errorf("list failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse XML response
 	var result ListBucketResult
 	if err := xml.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logging.Error("Failed to parse S3 list response", err,
+			map[string]interface{}{
+				"prefix": prefix,
+			})
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
@@ -266,7 +370,6 @@ func (c *S3Client) createRequestForBucket(ctx context.Context, method, rawQuery 
 	canonicalURI := "/" + c.config.BucketName
 	return c.buildSignedRequest(ctx, method, canonicalURI, rawQuery, nil)
 }
-
 
 // calculateAuthorization calculates AWS V4 signature authorization header.
 func (c *S3Client) calculateAuthorization(method, key, amzDate, rawQuery string) string {
@@ -359,18 +462,43 @@ func (c *S3Client) GetBucketLocation(ctx context.Context) (string, error) {
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// T217: Categorize network errors
+		errorCode := c.categorizeError(err)
+
+		logging.ErrorWithCode("S3 location request failed",
+			string(errorCode), err,
+			map[string]interface{}{
+				"bucket": c.config.BucketName,
+			})
+
 		return "", fmt.Errorf("location request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+
+		// T217: Categorize HTTP errors
+		errorCode := c.categorizeHTTPError(resp.StatusCode, string(body))
+
+		logging.ErrorWithCode("S3 location request failed",
+			string(errorCode), nil,
+			map[string]interface{}{
+				"bucket":      c.config.BucketName,
+				"status":      resp.StatusCode,
+				"body_prefix": truncateString(string(body), 200),
+			})
+
 		return "", fmt.Errorf("location request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse XML response
 	var locationConstraint LocationConstraint
 	if err := xml.NewDecoder(resp.Body).Decode(&locationConstraint); err != nil {
+		logging.Error("Failed to parse S3 location response", err,
+			map[string]interface{}{
+				"bucket": c.config.BucketName,
+			})
 		return "", fmt.Errorf("failed to parse location response: %w", err)
 	}
 
@@ -380,4 +508,66 @@ func (c *S3Client) GetBucketLocation(ctx context.Context) (string, error) {
 	}
 
 	return locationConstraint.LocationConstraint, nil
+}
+
+// =====================================================
+// Error Handling (T217)
+// =====================================================
+
+// categorizeError categorizes a network error into an appropriate error code.
+// T217: S3 service failure handling with timeout and network detection.
+func (c *S3Client) categorizeError(err error) errors.ErrorCode {
+	if err == nil {
+		return errors.ErrSyncFailed
+	}
+
+	// Check for timeout errors
+	if netErr, ok := err.(interface{ Timeout() bool }); ok && netErr.Timeout() {
+		return errors.ErrSyncTimeout
+	}
+
+	// Check for URL errors (network connectivity)
+	if _, ok := err.(*url.Error); ok {
+		return errors.ErrSyncFailed
+	}
+
+	// Default: general sync failure
+	return errors.ErrSyncFailed
+}
+
+// categorizeHTTPError categorizes an HTTP status code and response body into an error code.
+// T217: S3 service failure handling with auth and quota detection.
+func (c *S3Client) categorizeHTTPError(statusCode int, body string) errors.ErrorCode {
+	switch statusCode {
+	// Authentication/Authorization errors
+	case http.StatusUnauthorized:
+		return errors.ErrSyncAuthFailed
+	case http.StatusForbidden:
+		// Check if it's a signature mismatch (credentials issue)
+		if strings.Contains(body, "SignatureDoesNotMatch") ||
+		   strings.Contains(body, "InvalidAccessKeyId") ||
+		   strings.Contains(body, "AccessDenied") {
+			return errors.ErrSyncAuthFailed
+		}
+		return errors.ErrSyncFailed
+
+	// Quota exceeded errors
+	case 503: // Service Unavailable
+		if strings.Contains(body, "SlowDown") || strings.Contains(body, "Quota") {
+			return errors.ErrSyncQuotaExceeded
+		}
+		return errors.ErrSyncFailed
+
+	default:
+		return errors.ErrSyncFailed
+	}
+}
+
+// truncateString truncates a string to a maximum length.
+// Used for logging to avoid overly long error messages.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

@@ -91,7 +91,7 @@ func TestAWSEndpointForRegion(t *testing.T) {
 // TestIsSupportedAWSRegion tests region support checking.
 func TestIsSupportedAWSRegion(t *testing.T) {
 	tests := []struct {
-		region   string
+		region    string
 		supported bool
 	}{
 		{"us-east-1", true},

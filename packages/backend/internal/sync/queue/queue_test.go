@@ -215,13 +215,13 @@ func TestCalculateBackoff(t *testing.T) {
 		retryCount  int
 		wantSeconds int64
 	}{
-		{"retry 1", 1, 120},      // 2^1 * 60 = 120
-		{"retry 2", 2, 240},      // 2^2 * 60 = 240
-		{"retry 3", 3, 480},      // 2^3 * 60 = 480
-		{"retry 4", 4, 960},      // 2^4 * 60 = 960
-		{"retry 5", 5, 1920},     // 2^5 * 60 = 1920
-		{"retry 6", 6, 3600},     // 2^6 * 60 = 3840 -> capped to 3600
-		{"retry 10", 10, 3600},   // Capped at 1 hour
+		{"retry 1", 1, 120},    // 2^1 * 60 = 120
+		{"retry 2", 2, 240},    // 2^2 * 60 = 240
+		{"retry 3", 3, 480},    // 2^3 * 60 = 480
+		{"retry 4", 4, 960},    // 2^4 * 60 = 960
+		{"retry 5", 5, 1920},   // 2^5 * 60 = 1920
+		{"retry 6", 6, 3600},   // 2^6 * 60 = 3840 -> capped to 3600
+		{"retry 10", 10, 3600}, // Capped at 1 hour
 	}
 
 	for _, tt := range tests {

@@ -54,11 +54,11 @@ func Get() *Logger {
 
 // LogEntry represents a structured log entry.
 type LogEntry struct {
-	Timestamp string  `json:"timestamp"`
-	Level    string  `json:"level"`
-	Message  string  `json:"message"`
-	Error    string  `json:"error,omitempty"`
-	Context  map[string]interface{} `json:"context,omitempty"`
+	Timestamp string                 `json:"timestamp"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	Error     string                 `json:"error,omitempty"`
+	Context   map[string]interface{} `json:"context,omitempty"`
 }
 
 // log writes a log entry at the specified level.
@@ -73,9 +73,9 @@ func (l *Logger) log(level LogLevel, message string, err error, context map[stri
 
 	entry := LogEntry{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Level:    string(level),
-		Message:  message,
-		Context:  context,
+		Level:     string(level),
+		Message:   message,
+		Context:   context,
 	}
 
 	if err != nil {
@@ -129,6 +129,18 @@ func (l *Logger) Error(message string, err error, context ...map[string]interfac
 	l.log(LevelError, message, err, ctx)
 }
 
+// ErrorWithCode logs an error message with an error code.
+// T210: Add error logging (timestamp, error code, message).
+func (l *Logger) ErrorWithCode(message string, code string, err error, context ...map[string]interface{}) {
+	ctx := l.getContext(context...)
+	if ctx == nil {
+		ctx = make(map[string]interface{})
+	}
+	// Add error_code to context
+	ctx["error_code"] = code
+	l.log(LevelError, message, err, ctx)
+}
+
 // getContext merges multiple context maps.
 func (l *Logger) getContext(context ...map[string]interface{}) map[string]interface{} {
 	if len(context) == 0 {
@@ -163,4 +175,10 @@ func Warn(message string, context ...map[string]interface{}) {
 
 func Error(message string, err error, context ...map[string]interface{}) {
 	Get().Error(message, err, context...)
+}
+
+// ErrorWithCode logs an error message with an error code using global logger.
+// T210: Add error logging (timestamp, error code, message).
+func ErrorWithCode(message string, code string, err error, context ...map[string]interface{}) {
+	Get().ErrorWithCode(message, code, err, context...)
 }

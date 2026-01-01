@@ -4,6 +4,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/kimhsiao/memonexus/backend/internal/models"
@@ -11,8 +12,53 @@ import (
 )
 
 // Repository provides CRUD operations for all models.
+// T222: Added prepared statement cache for query optimization.
 type Repository struct {
 	db *sql.DB
+
+	// T222: Prepared statement cache for frequently used queries
+	// Statements are prepared on first use and cached for reuse
+	stmtCache sync.Map // map[string]*sql.Stmt
+}
+
+// T222: PrepareStmt gets or creates a prepared statement from cache.
+// Key is the query string, value is the prepared statement.
+// Prepared statements are cached to avoid repeated SQL parsing overhead.
+func (r *Repository) PrepareStmt(query string) (*sql.Stmt, error) {
+	// Try to get from cache first
+	if stmt, ok := r.stmtCache.Load(query); ok {
+		return stmt.(*sql.Stmt), nil
+	}
+
+	// Prepare and cache
+	stmt, err := r.db.Prepare(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare statement: %w", err)
+	}
+
+	// Store in cache (if already stored by another goroutine, use existing)
+	actual, loaded := r.stmtCache.LoadOrStore(query, stmt)
+	if loaded {
+		// Another goroutine already prepared this, close our duplicate
+		stmt.Close()
+		return actual.(*sql.Stmt), nil
+	}
+
+	return stmt, nil
+}
+
+// Close closes all cached prepared statements.
+// Should be called when the Repository is no longer needed.
+func (r *Repository) Close() error {
+	var firstErr error
+	r.stmtCache.Range(func(key, value interface{}) bool {
+		stmt := value.(*sql.Stmt)
+		if err := stmt.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		return true
+	})
+	return firstErr
 }
 
 // NewRepository creates a new Repository instance.
@@ -44,15 +90,22 @@ func (r *Repository) CreateContentItem(item *models.ContentItem) error {
 }
 
 // GetContentItem retrieves a content item by ID.
+// T222: Uses prepared statement for repeated queries.
 func (r *Repository) GetContentItem(id string) (*models.ContentItem, error) {
 	query := `
 	SELECT id, title, content_text, source_url, media_type, tags, summary,
 		   is_deleted, created_at, updated_at, version, content_hash
 	FROM content_items WHERE id = ? AND is_deleted = 0
 	`
+	// T222: Use prepared statement from cache
+	stmt, err := r.PrepareStmt(query)
+	if err != nil {
+		return nil, err
+	}
+
 	var item models.ContentItem
 	var sourceURL, summary, contentHash sql.NullString
-	err := r.db.QueryRow(query, id).Scan(
+	err = stmt.QueryRow(id).Scan(
 		&item.ID, &item.Title, &item.ContentText, &sourceURL, &item.MediaType,
 		&item.Tags, &summary, &item.IsDeleted, &item.CreatedAt, &item.UpdatedAt,
 		&item.Version, &contentHash,
@@ -73,23 +126,34 @@ func (r *Repository) GetContentItem(id string) (*models.ContentItem, error) {
 }
 
 // ListContentItems returns content items with pagination and filters.
+// T222: Uses prepared statements for both query variants (with/without mediaType filter).
 func (r *Repository) ListContentItems(limit, offset int, mediaType string) ([]*models.ContentItem, error) {
-	query := `
+	// T222: Build query based on filters
+	baseQuery := `
 	SELECT id, title, content_text, source_url, media_type, tags, summary,
 		   is_deleted, created_at, updated_at, version, content_hash
 	FROM content_items WHERE is_deleted = 0
 	`
-	args := []interface{}{}
+	orderLimit := " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+
+	var query string
+	var args []interface{}
 
 	if mediaType != "" {
-		query += " AND media_type = ?"
-		args = append(args, mediaType)
+		query = baseQuery + " AND media_type = ?" + orderLimit
+		args = []interface{}{mediaType, limit, offset}
+	} else {
+		query = baseQuery + orderLimit
+		args = []interface{}{limit, offset}
 	}
 
-	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	// T222: Use prepared statement from cache
+	stmt, err := r.PrepareStmt(query)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := r.db.Query(query, args...)
+	rows, err := stmt.Query(args...)
 	if err != nil {
 		return nil, err
 	}

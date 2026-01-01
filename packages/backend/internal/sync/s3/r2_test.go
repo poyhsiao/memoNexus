@@ -43,9 +43,9 @@ func TestNewR2ClientPanicWithMissingAccountID(t *testing.T) {
 // TestR2EndpointForAccount tests generating R2 endpoints.
 func TestR2EndpointForAccount(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		accountID string
-		expected string
+		expected  string
 	}{
 		{
 			name:      "standard account ID",
@@ -77,9 +77,9 @@ func TestR2EndpointForAccount(t *testing.T) {
 // TestIsValidR2AccountID tests R2 account ID validation.
 func TestIsValidR2AccountID(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		accountID string
-		valid    bool
+		valid     bool
 	}{
 		{"valid lowercase", "abc123def4567890abc123def4567890", true},
 		{"valid uppercase", "ABC123DEF4567890ABC123DEF4567890", true},
@@ -105,25 +105,25 @@ func TestIsValidR2AccountID(t *testing.T) {
 // TestR2PublicURL tests generating public URLs.
 func TestR2PublicURL(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		customDomain string
 		key          string
 		expected     string
 	}{
 		{
-			name:        "basic URL",
+			name:         "basic URL",
 			customDomain: "cdn.example.com",
 			key:          "items/file.json",
 			expected:     "https://cdn.example.com/items/file.json",
 		},
 		{
-			name:        "nested path",
+			name:         "nested path",
 			customDomain: "files.example.com",
 			key:          "items/2024/01/document.pdf",
 			expected:     "https://files.example.com/items/2024/01/document.pdf",
 		},
 		{
-			name:        "root level file",
+			name:         "root level file",
 			customDomain: "example.com",
 			key:          "index.html",
 			expected:     "https://example.com/index.html",

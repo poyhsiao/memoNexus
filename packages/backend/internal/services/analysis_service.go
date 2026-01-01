@@ -6,12 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
 	"github.com/kimhsiao/memonexus/backend/internal/analysis"
 	"github.com/kimhsiao/memonexus/backend/internal/analysis/textrank"
+	"github.com/kimhsiao/memonexus/backend/internal/errors"
+	"github.com/kimhsiao/memonexus/backend/internal/logging"
 	"github.com/kimhsiao/memonexus/backend/internal/models"
 )
 
@@ -43,9 +44,9 @@ type AnalysisService struct {
 	wsBroadcaster WebSocketBroadcaster
 
 	// Event callbacks for WebSocket notifications
-	onAnalysisStarted func(contentID string)
+	onAnalysisStarted   func(contentID string)
 	onAnalysisCompleted func(contentID string, result *AnalysisResult)
-	onAnalysisFailed func(contentID string, err error)
+	onAnalysisFailed    func(contentID string, err error)
 
 	mu sync.RWMutex
 }
@@ -69,9 +70,9 @@ type AnalysisConfig struct {
 func DefaultAnalysisConfig() *AnalysisConfig {
 	return &AnalysisConfig{
 		EnableAI:         false, // AI is opt-in per constitution
-		NumKeywords:       10,
-		MaxSummaryLength:  500,
-		AITimeoutSeconds:  60,
+		NumKeywords:      10,
+		MaxSummaryLength: 500,
+		AITimeoutSeconds: 60,
 	}
 }
 
@@ -94,9 +95,9 @@ func NewAnalysisService(config *AnalysisConfig) *AnalysisService {
 	}
 
 	return &AnalysisService{
-		tfidfAnalyzer:    analysis.NewTFIDFAnalyzer(),
+		tfidfAnalyzer:     analysis.NewTFIDFAnalyzer(),
 		textrankExtractor: textrank.NewTextRankExtractor(),
-		config:           config,
+		config:            config,
 	}
 }
 
@@ -130,7 +131,7 @@ func (s *AnalysisService) SetWebSocketBroadcaster(ws WebSocketBroadcaster) {
 		}
 	}
 
-	log.Printf("[AnalysisService] WebSocket broadcaster configured")
+	logging.Info("WebSocket broadcaster configured")
 }
 
 // ConfigureAI sets up AI analysis with the given configuration.
@@ -148,10 +149,13 @@ func (s *AnalysisService) ConfigureAI(config *analysis.AIConfig) error {
 
 	// Validate configuration
 	if config.APIKey == "" {
+		logging.ErrorWithCode("API key is required for AI analysis", string(errors.ErrAINotConfigured), nil,
+			map[string]interface{}{"provider": config.Provider})
 		return fmt.Errorf("API key is required for AI analysis")
 	}
 
 	if config.Provider == "" {
+		logging.ErrorWithCode("AI provider must be specified", string(errors.ErrAINotConfigured), nil, nil)
 		return fmt.Errorf("AI provider must be specified")
 	}
 
@@ -160,8 +164,11 @@ func (s *AnalysisService) ConfigureAI(config *analysis.AIConfig) error {
 	s.aiConfig = config
 	s.config.EnableAI = true
 
-	log.Printf("[AnalysisService] AI configured: provider=%s, model=%s",
-		config.Provider, config.ModelName)
+	logging.Info("AI configured",
+		map[string]interface{}{
+			"provider": config.Provider,
+			"model":    config.ModelName,
+		})
 
 	return nil
 }
@@ -175,7 +182,7 @@ func (s *AnalysisService) DisableAI() {
 	s.aiConfig = nil
 	s.config.EnableAI = false
 
-	log.Printf("[AnalysisService] AI analysis disabled")
+	logging.Info("AI analysis disabled", nil)
 }
 
 // GetAIConfig returns the current AI configuration (with API key redacted).
@@ -189,11 +196,11 @@ func (s *AnalysisService) GetAIConfig() *analysis.AIConfig {
 
 	// Return a copy with API key redacted for security
 	return &analysis.AIConfig{
-		Provider:   s.aiConfig.Provider,
+		Provider:    s.aiConfig.Provider,
 		APIEndpoint: s.aiConfig.APIEndpoint,
-		APIKey:     "***REDACTED***",
-		ModelName:  s.aiConfig.ModelName,
-		MaxTokens:  s.aiConfig.MaxTokens,
+		APIKey:      "***REDACTED***",
+		ModelName:   s.aiConfig.ModelName,
+		MaxTokens:   s.aiConfig.MaxTokens,
 	}
 }
 
@@ -228,7 +235,11 @@ func (s *AnalysisService) AnalyzeContent(ctx context.Context, contentID string, 
 			return result, nil
 		}
 		// AI failed, fall through to TF-IDF (graceful degradation per FR-056)
-		log.Printf("[AnalysisService] AI analysis failed for %s, falling back to TF-IDF: %v", contentID, err)
+		logging.Warn("AI analysis failed, falling back to TF-IDF",
+			map[string]interface{}{
+				"content_id": contentID,
+				"error":      err.Error(),
+			})
 	}
 
 	// Fallback to offline analysis (TF-IDF + TextRank)
@@ -304,13 +315,13 @@ func (s *AnalysisService) analyzeOffline(contentID string, text string) (*Analys
 	language := s.detectLanguage(text)
 
 	return &AnalysisResult{
-		ContentID: contentID,
-		Keywords:  keywords,
-		Summary:   summary,
-		Language:  language,
-		Method:    "tfidf",
+		ContentID:  contentID,
+		Keywords:   keywords,
+		Summary:    summary,
+		Language:   language,
+		Method:     "tfidf",
 		Confidence: 0.7, // Offline methods have moderate confidence
-		AIUsed:    false,
+		AIUsed:     false,
 	}, nil
 }
 
@@ -357,7 +368,11 @@ func (s *AnalysisService) GenerateSummary(ctx context.Context, text string) (str
 		if err == nil {
 			return summary, nil
 		}
-		log.Printf("[AnalysisService] AI summarization failed, using extractive: %v", err)
+		logging.Warn("AI summarization failed, using extractive",
+			map[string]interface{}{
+				"error":    err.Error(),
+				"fallback": "extractive",
+			})
 	}
 
 	// Extractive summary: first few sentences

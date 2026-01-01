@@ -25,8 +25,8 @@ func TestWriteTarGz(t *testing.T) {
 
 	// Create test files
 	testFiles := map[string]string{
-		"file1.txt": "Content of file 1",
-		"file2.txt": "Content of file 2 with some more text",
+		"file1.txt":        "Content of file 1",
+		"file2.txt":        "Content of file 2 with some more text",
 		"subdir/file3.txt": "Content in subdirectory",
 	}
 
@@ -69,7 +69,7 @@ func TestExtractTarGz(t *testing.T) {
 	}
 
 	testFiles := map[string]string{
-		"data.json": `{"items": [{"id": "1", "title": "Test"}]}`,
+		"data.json":     `{"items": [{"id": "1", "title": "Test"}]}`,
 		"manifest.json": `{"version": "1.0"}`,
 	}
 
@@ -134,9 +134,9 @@ func TestCompressDecompressRoundTrip(t *testing.T) {
 	testData := map[string]string{
 		"root.txt":              "Root file content",
 		"dir1/file1.txt":        "File in dir1",
-		"dir1/subdir1/file.txt":  "Nested file",
-		"dir1/subdir2/data.txt":  "Another nested file",
-		"dir2/large.txt":         strings.Repeat("Large file content. ", 1000),
+		"dir1/subdir1/file.txt": "Nested file",
+		"dir1/subdir2/data.txt": "Another nested file",
+		"dir2/large.txt":        strings.Repeat("Large file content. ", 1000),
 	}
 
 	for name, content := range testData {
