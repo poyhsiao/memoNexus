@@ -63,12 +63,12 @@ func (r *Repository) Highlight(db *sql.DB, itemID string, query string, opts *Hi
 	// The snippet() function extracts context around matches and marks them with <b> tags
 	snippetQuery := `
 		SELECT
-			snippet(content_items_fts, 1, '<b>', '</b>', '...', ?) as title_snippet,
-			snippet(content_items_fts, 2, '<b>', '</b>', '...', ?) as content_snippet,
-			snippet(content_items_fts, 3, '<b>', '</b>', '...', ?) as tags_snippet
-		FROM content_items_fts
+			snippet(content_fts, 1, '<b>', '</b>', '...', ?) as title_snippet,
+			snippet(content_fts, 2, '<b>', '</b>', '...', ?) as content_snippet,
+			snippet(content_fts, 3, '<b>', '</b>', '...', ?) as tags_snippet
+		FROM content_fts
 		WHERE rowid = (SELECT rowid FROM content_items WHERE id = ?)
-			AND content_items_fts MATCH ?
+			AND content_fts MATCH ?
 		LIMIT 1
 	`
 

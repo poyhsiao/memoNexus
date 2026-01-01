@@ -8,9 +8,10 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 echo "Running MemoNexus tests..."
 
 # Go tests
+# Use novidcodec tag to skip optional ffmpeg dependencies
 echo "Running Go tests..."
 cd "$PROJECT_ROOT/packages/backend"
-go test -v -cover ./...
+go test -tags=novidcodec -v -cover ./...
 
 # Flutter tests
 echo "Running Flutter tests..."

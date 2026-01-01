@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -280,5 +281,216 @@ func TestS3ClientConnectionError(t *testing.T) {
 	_, err := client.List(ctx, "")
 	if err == nil {
 		t.Error("Expected connection error, got nil")
+	}
+}
+
+// TestS3ClientTestConnection tests the TestConnection method.
+func TestS3ClientTestConnection(t *testing.T) {
+	// Create test server that returns successful list response
+	xmlResponse := `<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>test-bucket</Name>
+  <Prefix></Prefix>
+  <Contents>
+    <Key>test-file.json</Key>
+    <LastModified>2024-01-01T00:00:00.000Z</LastModified>
+    <Size>1024</Size>
+  </Contents>
+</ListBucketResult>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("Expected GET request, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, xmlResponse)
+	}))
+	defer server.Close()
+
+	// Create S3 client config
+	config := &S3Config{
+		Endpoint:       server.URL,
+		BucketName:     "test-bucket",
+		AccessKey:      "test-access-key",
+		SecretKey:      "test-secret-key",
+		Region:         "us-east-1",
+		ForcePathStyle: true,
+	}
+
+	// Create client
+	client := NewS3Client(config)
+
+	// Test connection
+	ctx := context.Background()
+	err := client.TestConnection(ctx)
+
+	if err != nil {
+		t.Errorf("TestConnection failed: %v", err)
+	}
+}
+
+// TestS3ClientTestConnectionFailure tests TestConnection with server error.
+func TestS3ClientTestConnectionFailure(t *testing.T) {
+	// Create test server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	// Create S3 client config
+	config := &S3Config{
+		Endpoint:       server.URL,
+		BucketName:     "test-bucket",
+		AccessKey:      "test-access-key",
+		SecretKey:      "test-secret-key",
+		Region:         "us-east-1",
+		ForcePathStyle: true,
+	}
+
+	// Create client
+	client := NewS3Client(config)
+
+	// Test connection
+	ctx := context.Background()
+	err := client.TestConnection(ctx)
+
+	if err == nil {
+		t.Error("Expected error for failed connection, got nil")
+	}
+}
+
+// TestS3ClientGetBucketLocation tests the GetBucketLocation method.
+func TestS3ClientGetBucketLocation(t *testing.T) {
+	tests := []struct {
+		name           string
+		locationXML    string
+		expectedRegion string
+	}{
+		{
+			name: "us-east-1 (empty location)",
+			locationXML: `<?xml version="1.0" encoding="UTF-8"?>
+<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></LocationConstraint>`,
+			expectedRegion: "us-east-1",
+		},
+		{
+			name: "eu-west-1",
+			locationXML: `<?xml version="1.0" encoding="UTF-8"?>
+<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">eu-west-1</LocationConstraint>`,
+			expectedRegion: "eu-west-1",
+		},
+		{
+			name: "ap-southeast-1",
+			locationXML: `<?xml version="1.0" encoding="UTF-8"?>
+<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">ap-southeast-1</LocationConstraint>`,
+			expectedRegion: "ap-southeast-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test server
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("Expected GET request, got %s", r.Method)
+				}
+				// Check for location query parameter
+				if !strings.Contains(r.URL.RawQuery, "location") {
+					t.Errorf("Expected 'location' query parameter, got %s", r.URL.RawQuery)
+				}
+				w.Header().Set("Content-Type", "application/xml")
+				w.WriteHeader(http.StatusOK)
+				io.WriteString(w, tt.locationXML)
+			}))
+			defer server.Close()
+
+			// Create S3 client config
+			config := &S3Config{
+				Endpoint:       server.URL,
+				BucketName:     "test-bucket",
+				AccessKey:      "test-access-key",
+				SecretKey:      "test-secret-key",
+				Region:         "us-east-1",
+				ForcePathStyle: true,
+			}
+
+			// Create client
+			client := NewS3Client(config)
+
+			// Test get bucket location
+			ctx := context.Background()
+			region, err := client.GetBucketLocation(ctx)
+
+			if err != nil {
+				t.Errorf("GetBucketLocation failed: %v", err)
+			}
+
+			if region != tt.expectedRegion {
+				t.Errorf("Expected region %s, got %s", tt.expectedRegion, region)
+			}
+		})
+	}
+}
+
+// TestS3ClientGetBucketLocationError tests GetBucketLocation with error response.
+func TestS3ClientGetBucketLocationError(t *testing.T) {
+	// Create test server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>`)
+	}))
+	defer server.Close()
+
+	// Create S3 client config
+	config := &S3Config{
+		Endpoint:       server.URL,
+		BucketName:     "test-bucket",
+		AccessKey:      "test-access-key",
+		SecretKey:      "test-secret-key",
+		Region:         "us-east-1",
+		ForcePathStyle: true,
+	}
+
+	// Create client
+	client := NewS3Client(config)
+
+	// Test get bucket location
+	ctx := context.Background()
+	_, err := client.GetBucketLocation(ctx)
+
+	if err == nil {
+		t.Error("Expected error for forbidden request, got nil")
+	}
+}
+
+// TestS3ClientGetBucketLocationInvalidXML tests GetBucketLocation with invalid XML.
+func TestS3ClientGetBucketLocationInvalidXML(t *testing.T) {
+	// Create test server that returns invalid XML
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, `<invalid><xml>`)
+	}))
+	defer server.Close()
+
+	// Create S3 client config
+	config := &S3Config{
+		Endpoint:       server.URL,
+		BucketName:     "test-bucket",
+		AccessKey:      "test-access-key",
+		SecretKey:      "test-secret-key",
+		Region:         "us-east-1",
+		ForcePathStyle: true,
+	}
+
+	// Create client
+	client := NewS3Client(config)
+
+	// Test get bucket location
+	ctx := context.Background()
+	_, err := client.GetBucketLocation(ctx)
+
+	if err == nil {
+		t.Error("Expected error for invalid XML, got nil")
 	}
 }

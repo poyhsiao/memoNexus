@@ -183,7 +183,8 @@ func (s *Scheduler) applyRetentionPolicy(ctx context.Context) error {
 	})
 
 	// Delete excess archives
-	if len(archives) > s.config.RetentionCount {
+	// T227: Only apply retention if count > 0 (0 = unlimited retention)
+	if s.config.RetentionCount > 0 && len(archives) > s.config.RetentionCount {
 		toDelete := archives[:len(archives)-s.config.RetentionCount]
 		for _, archive := range toDelete {
 			if err := os.Remove(archive.Path); err != nil {

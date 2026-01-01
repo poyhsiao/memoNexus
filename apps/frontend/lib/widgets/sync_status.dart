@@ -191,7 +191,7 @@ class _SyncStatusCard extends StatelessWidget {
                 Text(
                   'Last sync: ${_formatLastSync()}',
                   style: TextStyle(
-                    color: _getStatusColor().withOpacity(0.8),
+                    color: _getStatusColor().withValues(alpha: 0.8),
                     fontSize: 12,
                   ),
                 ),

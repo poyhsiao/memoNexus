@@ -44,9 +44,10 @@ class _ContentListWidgetState extends ConsumerState<ContentListWidget> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.8) {
-      final notifier = ref.read(contentListProvider.notifier);
-      if (!notifier.state.isLoading) {
-        notifier.loadMore();
+      // Read state through provider instead of accessing protected member
+      final currentState = ref.read(contentListProvider);
+      if (!currentState.isLoading) {
+        ref.read(contentListProvider.notifier).loadMore();
       }
     }
   }
@@ -331,7 +332,6 @@ class ContentListTile extends StatelessWidget {
       case MediaType.markdown:
         return Icons.description;
       case MediaType.web:
-      default:
         return Icons.link;
     }
   }
@@ -347,7 +347,6 @@ class ContentListTile extends StatelessWidget {
       case MediaType.markdown:
         return Colors.blue;
       case MediaType.web:
-      default:
         return Theme.of(context).colorScheme.primary;
     }
   }

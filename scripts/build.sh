@@ -12,13 +12,14 @@ BUILD_TYPE=${1:-debug}
 PLATFORMS=${2:-all}
 
 # Build Go Core (shared library for mobile, binary for desktop)
+# Use novidcodec tag to skip optional ffmpeg dependencies
 echo "Building Go Core..."
 cd "$PROJECT_ROOT/packages/backend"
 
 if [[ "$BUILD_TYPE" == "release" ]]; then
-  go build -ldflags="-s -w" -o "$PROJECT_ROOT/build/bin/core" ./cmd/core
+  go build -tags=novidcodec -ldflags="-s -w" -o "$PROJECT_ROOT/build/bin/core" ./cmd/core
 else
-  go build -o "$PROJECT_ROOT/build/bin/core" ./cmd/core
+  go build -tags=novidcodec -o "$PROJECT_ROOT/build/bin/core" ./cmd/core
 fi
 
 # Build Flutter app

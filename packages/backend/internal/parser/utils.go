@@ -32,6 +32,11 @@ func DetectLanguage(s string) string {
 
 // Truncate truncates string to max length.
 func Truncate(s string, maxLen int) string {
+	// Handle invalid maxLen
+	if maxLen <= 0 {
+		return "..."
+	}
+
 	if len(s) <= maxLen {
 		return s
 	}

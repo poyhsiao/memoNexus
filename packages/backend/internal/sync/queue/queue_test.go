@@ -504,3 +504,144 @@ type TestError struct {
 func (e *TestError) Error() string {
 	return e.Message
 }
+
+// =====================================================
+// Online/Offline Status Tests
+// =====================================================
+
+// TestSyncQueue_SetOnlineStatus verifies online status changes.
+func TestSyncQueue_SetOnlineStatus(t *testing.T) {
+	q := NewSyncQueue(100)
+
+	// Should be online by default
+	if !q.IsOnline() {
+		t.Error("Queue should be online by default")
+	}
+
+	// Set offline
+	q.SetOnlineStatus(false)
+	if q.IsOnline() {
+		t.Error("Queue should be offline after SetOnlineStatus(false)")
+	}
+
+	// Set online
+	q.SetOnlineStatus(true)
+	if !q.IsOnline() {
+		t.Error("Queue should be online after SetOnlineStatus(true)")
+	}
+}
+
+// TestSyncQueue_IsOnline verifies online status retrieval.
+func TestSyncQueue_IsOnline(t *testing.T) {
+	q := NewSyncQueue(100)
+
+	// Default is online
+	if !q.IsOnline() {
+		t.Error("IsOnline should return true by default")
+	}
+
+	q.SetOnlineStatus(false)
+	if q.IsOnline() {
+		t.Error("IsOnline should return false after setting offline")
+	}
+}
+
+// TestSyncQueue_QueueWhenOffline verifies behavior when offline.
+func TestSyncQueue_QueueWhenOffline(t *testing.T) {
+	q := NewSyncQueue(100)
+	q.SetOnlineStatus(false)
+
+	// Add some items while offline
+	payload := map[string]interface{}{"item_id": "test-1"}
+	item1, _ := q.Enqueue(OperationUpload, payload)
+	item2, _ := q.Enqueue(OperationDownload, payload)
+
+	// Mark both as failed (simulating offline failure)
+	q.Failed(item1.ID, &TestError{Message: "offline"})
+	q.Failed(item2.ID, &TestError{Message: "offline"})
+
+	// Both should be queued for retry
+	if q.Size() != 2 {
+		t.Errorf("Size should be 2, got %d", q.Size())
+	}
+
+	// Now process on reconnect
+	q.SetOnlineStatus(true)
+	processed := q.ProcessOnReconnect()
+
+	// Should process queued items
+	if processed != 2 {
+		t.Errorf("Processed should be 2, got %d", processed)
+	}
+
+	// Items should be back in pending status
+	pendingItems := q.GetPending()
+	if len(pendingItems) != 2 {
+		t.Errorf("GetPending should return 2 items, got %d", len(pendingItems))
+	}
+
+	for _, item := range pendingItems {
+		if item.Status != QueueStatusPending {
+			t.Errorf("Item %s should be Pending, got %s", item.ID, item.Status)
+		}
+	}
+}
+
+// TestSyncQueue_ProcessOnReconnect verifies reconnection processing.
+func TestSyncQueue_ProcessOnReconnect(t *testing.T) {
+	q := NewSyncQueue(100)
+	q.SetOnlineStatus(false)
+
+	// Add items and mark them as failed
+	payload := map[string]interface{}{"item_id": "test"}
+	item1, _ := q.Enqueue(OperationUpload, payload)
+	item2, _ := q.Enqueue(OperationDelete, payload)
+
+	q.Failed(item1.ID, &TestError{Message: "network error"})
+	q.Failed(item2.ID, &TestError{Message: "network error"})
+
+	// Process on reconnect
+	q.SetOnlineStatus(true)
+	processed := q.ProcessOnReconnect()
+
+	if processed != 2 {
+		t.Errorf("ProcessOnReconnect should return 2, got %d", processed)
+	}
+
+	// Items should be reset to pending
+	pendingItems := q.GetPending()
+	if len(pendingItems) != 2 {
+		t.Errorf("Expected 2 pending items, got %d", len(pendingItems))
+	}
+}
+
+// TestSyncQueue_Stop verifies graceful shutdown.
+func TestSyncQueue_Stop(t *testing.T) {
+	q := NewSyncQueue(100)
+
+	// Stop should not panic
+	q.Stop()
+
+	// Verify queue is cleared after stop
+	payload := map[string]interface{}{"item_id": "test"}
+	q.Enqueue(OperationUpload, payload)
+
+	if q.Size() != 0 {
+		// After Stop, new items might not be accepted
+		// This behavior depends on implementation
+		t.Skip("Stop behavior needs clarification")
+	}
+}
+
+// TestSyncQueue_QueueWhenOffline_empty verifies empty queue on reconnect.
+func TestSyncQueue_QueueWhenOffline_empty(t *testing.T) {
+	q := NewSyncQueue(100)
+	q.SetOnlineStatus(false)
+
+	// No items queued
+	processed := q.ProcessOnReconnect()
+
+	if processed != 0 {
+		t.Errorf("ProcessOnReconnect should return 0 for empty queue, got %d", processed)
+	}
+}

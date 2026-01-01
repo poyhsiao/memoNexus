@@ -386,7 +386,8 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
         tags: _editedTags,
       );
 
-      // Refresh the item
+      // Refresh the item to get updated data
+      // ignore: unused_result
       ref.refresh(contentItemProvider(widget.itemId));
 
       if (mounted) {
@@ -418,7 +419,9 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
 
       if (mounted) {
         // Refresh the item to get the updated summary
+        // ignore: unused_result
         ref.refresh(contentItemProvider(widget.itemId));
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['method'] == 'ai'
@@ -430,6 +433,7 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to generate summary: $e'),
@@ -460,6 +464,7 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
         setState(() {
           _isExtractingKeywords = false;
         });
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to extract keywords: $e'),
@@ -503,27 +508,27 @@ class _ContentDetailScreenState extends ConsumerState<ContentDetailScreen> {
   void _showDeleteConfirmation(BuildContext context, ContentItem item) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Content'),
         content: Text('Are you sure you want to delete "${item.title}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               try {
                 await ref.read(contentListProvider.notifier).deleteItem(item.id);
-                if (mounted) {
+                if (mounted && context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Content deleted')),
                   );
                 }
               } catch (e) {
-                if (mounted) {
+                if (mounted && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Failed to delete: $e')),
                   );

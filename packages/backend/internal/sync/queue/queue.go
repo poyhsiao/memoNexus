@@ -449,15 +449,25 @@ func (q *SyncQueue) SetOnlineStatus(isOnline bool) {
 	// If coming back online and we have pending items, notify
 	if !wasOnline && isOnline {
 		q.mu.Lock()
-		hasPending := len(q.GetPending()) > 0
+		// Check for pending items directly to avoid deadlock
+		// (GetPending would try to acquire RLock while we hold Lock)
+		hasPending := false
+		now := time.Now().Unix()
+		for _, item := range q.items {
+			if item.Status == QueueStatusPending && item.NextRetryAt <= now {
+				hasPending = true
+				break
+			}
+		}
 		if hasPending {
 			q.notEmpty.Signal()
 		}
 		q.mu.Unlock()
 
+		pendingItems := q.GetPending()
 		logging.Info("Network restored, pending queue items ready for processing",
 			map[string]interface{}{
-				"pending_count": len(q.GetPending()),
+				"pending_count": len(pendingItems),
 			})
 	}
 }

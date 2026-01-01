@@ -85,7 +85,7 @@ class _TagPickerWidgetState extends ConsumerState<TagPickerWidget> {
                 selectedColor: Theme.of(context)
                     .colorScheme
                     .primary
-                    .withOpacity(0.2),
+                    .withValues(alpha: 0.2),
                 checkmarkColor: Theme.of(context).colorScheme.primary,
               );
             }).toList(),

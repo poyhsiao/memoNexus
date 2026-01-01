@@ -340,3 +340,160 @@ func verifyTarGzContents(archivePath string, expectedFiles map[string]string) er
 
 	return nil
 }
+
+// =====================================================
+// Additional Error Cases Tests
+// =====================================================
+
+// TestWriteTarGz_nonExistentSource verifies error handling for missing source.
+func TestWriteTarGz_nonExistentSource(t *testing.T) {
+	tempDir := t.TempDir()
+
+	targetPath := filepath.Join(tempDir, "archive.tar.gz")
+
+	err := writeTarGz("/non/existent/source", targetPath)
+	if err == nil {
+		t.Error("writeTarGz() with non-existent source should return error")
+	}
+}
+
+// TestWriteTarGz_invalidDestination verifies error handling for invalid destination.
+func TestWriteTarGz_invalidDestination(t *testing.T) {
+	tempDir := t.TempDir()
+
+	sourceDir := filepath.Join(tempDir, "source")
+	os.MkdirAll(sourceDir, 0755)
+	os.WriteFile(filepath.Join(sourceDir, "file.txt"), []byte("test"), 0644)
+
+	// Try to write to non-existent directory
+	err := writeTarGz(sourceDir, "/non/existent/dir/archive.tar.gz")
+	if err == nil {
+		t.Error("writeTarGz() with invalid destination should return error")
+	}
+}
+
+// TestExtractTarGz_nonExistentArchive verifies error handling for missing archive.
+func TestExtractTarGz_nonExistentArchive(t *testing.T) {
+	tempDir := t.TempDir()
+
+	targetDir := filepath.Join(tempDir, "extracted")
+
+	err := extractTarGz("/non/existent/archive.tar.gz", targetDir)
+	if err == nil {
+		t.Error("extractTarGz() with non-existent archive should return error")
+	}
+}
+
+// TestExtractTarGz_invalidGzip verifies error handling for invalid gzip data.
+func TestExtractTarGz_invalidGzip(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a file that's not valid gzip
+	invalidArchive := filepath.Join(tempDir, "invalid.tar.gz")
+	os.WriteFile(invalidArchive, []byte("not gzip data"), 0644)
+
+	targetDir := filepath.Join(tempDir, "extracted")
+
+	err := extractTarGz(invalidArchive, targetDir)
+	if err == nil {
+		t.Error("extractTarGz() with invalid gzip should return error")
+	}
+}
+
+// TestExtractTarGz_truncatedArchive verifies error handling for truncated archive.
+func TestExtractTarGz_truncatedArchive(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a valid gzip archive but truncate the tar content
+	sourceDir := filepath.Join(tempDir, "source")
+	os.MkdirAll(sourceDir, 0755)
+	os.WriteFile(filepath.Join(sourceDir, "file.txt"), []byte("test content"), 0644)
+
+	truncatedArchive := filepath.Join(tempDir, "truncated.tar.gz")
+	if err := writeTarGz(sourceDir, truncatedArchive); err != nil {
+		t.Fatalf("Failed to create archive: %v", err)
+	}
+
+	// Truncate the archive
+	data, _ := os.ReadFile(truncatedArchive)
+	truncatedData := data[:len(data)/2] // Cut it in half
+	os.WriteFile(truncatedArchive, truncatedData, 0644)
+
+	targetDir := filepath.Join(tempDir, "extracted")
+
+	err := extractTarGz(truncatedArchive, targetDir)
+	if err == nil {
+		t.Error("extractTarGz() with truncated archive should return error")
+	}
+}
+
+// TestExtractTarGz_createTargetDir verifies target directory is created.
+func TestExtractTarGz_createTargetDir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create source and archive
+	sourceDir := filepath.Join(tempDir, "source")
+	os.MkdirAll(sourceDir, 0755)
+	os.WriteFile(filepath.Join(sourceDir, "file.txt"), []byte("test"), 0644)
+
+	archivePath := filepath.Join(tempDir, "archive.tar.gz")
+	if err := writeTarGz(sourceDir, archivePath); err != nil {
+		t.Fatalf("Failed to create archive: %v", err)
+	}
+
+	// Extract to non-existent directory
+	targetDir := filepath.Join(tempDir, "extracted", "nested", "path")
+	// Don't create targetDir - let extractTarGz create it
+
+	if err := extractTarGz(archivePath, targetDir); err != nil {
+		t.Fatalf("extractTarGz failed: %v", err)
+	}
+
+	// Verify file was extracted
+	extractedFile := filepath.Join(targetDir, "file.txt")
+	if _, err := os.Stat(extractedFile); os.IsNotExist(err) {
+		t.Error("File was not extracted to nested path")
+	}
+}
+
+// TestWriteTarGz_unicodeNames verifies handling of unicode filenames.
+func TestWriteTarGz_unicodeNames(t *testing.T) {
+	tempDir := t.TempDir()
+
+	sourceDir := filepath.Join(tempDir, "source")
+	os.MkdirAll(sourceDir, 0755)
+
+	// Create files with unicode names
+	unicodeFiles := map[string]string{
+		"文件.txt":     "Chinese filename",
+		"файл.txt":     "Russian filename",
+		"αρχείο.txt":   "Greek filename",
+		"ファイル.txt": "Japanese filename",
+	}
+
+	for name, content := range unicodeFiles {
+		path := filepath.Join(sourceDir, name)
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create unicode file %s: %v", name, err)
+		}
+	}
+
+	archivePath := filepath.Join(tempDir, "archive.tar.gz")
+	if err := writeTarGz(sourceDir, archivePath); err != nil {
+		t.Fatalf("Failed to create archive: %v", err)
+	}
+
+	// Extract and verify
+	extractDir := filepath.Join(tempDir, "extracted")
+	if err := extractTarGz(archivePath, extractDir); err != nil {
+		t.Fatalf("Failed to extract: %v", err)
+	}
+
+	// Verify files were extracted
+	for name := range unicodeFiles {
+		path := filepath.Join(extractDir, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("Unicode file %s was not extracted", name)
+		}
+	}
+}

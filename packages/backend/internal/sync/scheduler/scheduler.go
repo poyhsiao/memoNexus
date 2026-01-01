@@ -178,6 +178,12 @@ func (s *Scheduler) queueProcessorLoop(ctx context.Context) {
 
 // runSync executes a sync operation.
 func (s *Scheduler) runSync(ctx context.Context) {
+	// Check if online before attempting sync
+	if !s.IsOnline() {
+		logging.Debug("Skipping sync - scheduler is offline", nil)
+		return
+	}
+
 	s.mu.Lock()
 	s.syncInProgress = true
 	s.mu.Unlock()
