@@ -105,13 +105,25 @@ func (r *Resolver) resolveLastWriteWins(conflict *Conflict) (*ResolveResult, err
 		DetectedAt:      time.Now().Unix(),
 	}
 
+	// Determine winner side for structured logging
+	winnerSide := ""
+	switch resolution {
+	case "local_wins":
+		winnerSide = "local"
+	case "remote_wins":
+		winnerSide = "remote"
+	default:
+		winnerSide = "unknown"
+	}
+
 	logging.Info("Conflict resolved using last-write-wins",
 		map[string]interface{}{
 			"item_id":          winningItem.ID,
+			"winner_id":        winningItem.ID,
+			"winner_side":      winnerSide,
 			"local_timestamp":  conflict.LocalItem.UpdatedAt,
 			"remote_timestamp": conflict.RemoteItem.UpdatedAt,
 			"resolution":       resolution,
-			"winner":           resolution,
 		})
 
 	return &ResolveResult{
