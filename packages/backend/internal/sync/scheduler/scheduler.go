@@ -15,7 +15,7 @@ import (
 
 // Scheduler manages background sync operations.
 type Scheduler struct {
-	engine          *syncpkg.SyncEngine
+	engine          syncpkg.SyncEngineInterface
 	queue           *queue.SyncQueue
 	syncInterval    time.Duration
 	queueInterval   time.Duration
@@ -45,7 +45,7 @@ func DefaultSchedulerConfig() *SchedulerConfig {
 
 // NewScheduler creates a new Scheduler.
 // T174: Background sync scheduler with periodic sync when online, queue processing when offline.
-func NewScheduler(engine *syncpkg.SyncEngine, queue *queue.SyncQueue, config *SchedulerConfig) *Scheduler {
+func NewScheduler(engine syncpkg.SyncEngineInterface, queue *queue.SyncQueue, config *SchedulerConfig) *Scheduler {
 	if config == nil {
 		config = DefaultSchedulerConfig()
 	}

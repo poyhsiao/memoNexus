@@ -34,7 +34,7 @@ type SchedulerConfig struct {
 
 // Scheduler manages automatic export scheduling.
 type Scheduler struct {
-	service *export.ExportService
+	service export.ExportServiceInterface
 	config  *SchedulerConfig
 	ticker  *time.Ticker
 	stopCh  chan struct{}
@@ -42,7 +42,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new export scheduler.
-func NewScheduler(service *export.ExportService, config *SchedulerConfig) *Scheduler {
+func NewScheduler(service export.ExportServiceInterface, config *SchedulerConfig) *Scheduler {
 	if config.ExportDir == "" {
 		config.ExportDir = "exports"
 	}

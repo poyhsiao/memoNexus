@@ -94,7 +94,7 @@ type SyncOperation struct {
 
 // SyncEngine provides synchronization capabilities.
 type SyncEngine struct {
-	repo         *db.Repository
+	repo         db.SyncRepository
 	storage      ObjectStore
 	status       SyncStatus
 	lastSync     *time.Time
@@ -121,7 +121,7 @@ type ObjectStore interface {
 }
 
 // NewSyncEngine creates a new SyncEngine.
-func NewSyncEngine(repo *db.Repository, storage ObjectStore) *SyncEngine {
+func NewSyncEngine(repo db.SyncRepository, storage ObjectStore) *SyncEngine {
 	return &SyncEngine{
 		repo:         repo,
 		storage:      storage,

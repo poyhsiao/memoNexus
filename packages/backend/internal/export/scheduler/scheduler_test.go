@@ -685,16 +685,17 @@ func TestScheduler_runExport_generatesPath(t *testing.T) {
 
 // TestScheduler_Start_daily verifies daily interval creates ticker.
 func TestScheduler_Start_daily(t *testing.T) {
-	t.Skip("Skipping - requires database setup for ExportService")
+	tempDir := t.TempDir()
 
-	service := &export.ExportService{}
+	mockService := export.NewMockExportService()
+
 	config := &SchedulerConfig{
 		Interval:  IntervalDaily,
-		ExportDir: t.TempDir(),
+		ExportDir: tempDir,
 	}
-	scheduler := NewScheduler(service, config)
+	scheduler := NewScheduler(mockService, config)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	err := scheduler.Start(ctx)
@@ -708,21 +709,21 @@ func TestScheduler_Start_daily(t *testing.T) {
 	}
 
 	scheduler.Stop()
-	cancel()
 }
 
 // TestScheduler_Start_weekly verifies weekly interval creates ticker.
 func TestScheduler_Start_weekly(t *testing.T) {
-	t.Skip("Skipping - requires database setup for ExportService")
+	tempDir := t.TempDir()
 
-	service := &export.ExportService{}
+	mockService := export.NewMockExportService()
+
 	config := &SchedulerConfig{
 		Interval:  IntervalWeekly,
-		ExportDir: t.TempDir(),
+		ExportDir: tempDir,
 	}
-	scheduler := NewScheduler(service, config)
+	scheduler := NewScheduler(mockService, config)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	err := scheduler.Start(ctx)
@@ -736,21 +737,21 @@ func TestScheduler_Start_weekly(t *testing.T) {
 	}
 
 	scheduler.Stop()
-	cancel()
 }
 
 // TestScheduler_Start_monthly verifies monthly interval creates ticker.
 func TestScheduler_Start_monthly(t *testing.T) {
-	t.Skip("Skipping - requires database setup for ExportService")
+	tempDir := t.TempDir()
 
-	service := &export.ExportService{}
+	mockService := export.NewMockExportService()
+
 	config := &SchedulerConfig{
 		Interval:  IntervalMonthly,
-		ExportDir: t.TempDir(),
+		ExportDir: tempDir,
 	}
-	scheduler := NewScheduler(service, config)
+	scheduler := NewScheduler(mockService, config)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	err := scheduler.Start(ctx)
@@ -764,19 +765,19 @@ func TestScheduler_Start_monthly(t *testing.T) {
 	}
 
 	scheduler.Stop()
-	cancel()
 }
 
 // TestScheduler_Start_contextCancellation verifies context cancellation stops scheduler.
 func TestScheduler_Start_contextCancellation(t *testing.T) {
-	t.Skip("Skipping - requires database setup for ExportService")
+	tempDir := t.TempDir()
 
-	service := &export.ExportService{}
+	mockService := export.NewMockExportService()
+
 	config := &SchedulerConfig{
 		Interval:  IntervalDaily,
-		ExportDir: t.TempDir(),
+		ExportDir: tempDir,
 	}
-	scheduler := NewScheduler(service, config)
+	scheduler := NewScheduler(mockService, config)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -785,11 +786,17 @@ func TestScheduler_Start_contextCancellation(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
+	// Cancel immediately
 	cancel()
 
 	time.Sleep(100 * time.Millisecond)
 
 	scheduler.Stop()
+
+	// Verify export was called at least once (immediate export)
+	if !mockService.WasExportCalled() {
+		t.Error("Export should have been called at least once before cancellation")
+	}
 }
 
 // =====================================================
@@ -798,29 +805,39 @@ func TestScheduler_Start_contextCancellation(t *testing.T) {
 
 // TestScheduler_UpdateConfig_withRunningTicker verifies UpdateConfig stops ticker.
 func TestScheduler_UpdateConfig_withRunningTicker(t *testing.T) {
-	t.Skip("Skipping - requires database setup for ExportService")
+	tempDir := t.TempDir()
 
-	service := &export.ExportService{}
+	mockService := export.NewMockExportService()
+
 	config := &SchedulerConfig{
 		Interval:  IntervalDaily,
-		ExportDir: t.TempDir(),
+		ExportDir: tempDir,
 	}
-	scheduler := NewScheduler(service, config)
+	scheduler := NewScheduler(mockService, config)
 
-	ctx := context.Background()
+	// Use a short timeout to avoid long test runs
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	scheduler.Start(ctx)
+
+	// Wait a bit for ticker to be created
+	time.Sleep(10 * time.Millisecond)
 
 	// Verify ticker was created
 	if scheduler.ticker == nil {
 		t.Error("Start() should create ticker")
 	}
 
-	// Update config - this should stop the ticker
+	// Store original stopCh to verify it's recreated
+	originalStopCh := scheduler.stopCh
+
+	// Update config - this should stop the ticker and recreate stopCh
 	newConfig := &SchedulerConfig{
 		Interval:       IntervalWeekly,
 		RetentionCount: 10,
 		IncludeMedia:   false,
-		ExportDir:      t.TempDir(),
+		ExportDir:      tempDir,
 	}
 
 	err := scheduler.UpdateConfig(newConfig)
@@ -829,14 +846,21 @@ func TestScheduler_UpdateConfig_withRunningTicker(t *testing.T) {
 		t.Fatalf("UpdateConfig() error = %v", err)
 	}
 
-	// Verify stopCh was recreated
+	// Verify stopCh was recreated (new channel)
 	if scheduler.stopCh == nil {
 		t.Error("UpdateConfig() should recreate stopCh")
 	}
 
-	if scheduler.ticker != nil {
-		t.Log("Note: ticker state after UpdateConfig")
+	if scheduler.stopCh == originalStopCh {
+		t.Error("UpdateConfig() should create a new stopCh, not reuse the old one")
 	}
+
+	// Ticker should be stopped (nil after Stop)
+	if scheduler.ticker != nil {
+		t.Log("Note: ticker may not be nil immediately after UpdateConfig")
+	}
+
+	scheduler.Stop()
 }
 
 // TestScheduler_UpdateConfig_preservesSettings verifies settings are preserved.
@@ -881,5 +905,675 @@ func TestScheduler_UpdateConfig_preservesSettings(t *testing.T) {
 
 	if retrieved.Password != "new-password" {
 		t.Errorf("Password = %q, want 'new-password'", retrieved.Password)
+	}
+}
+
+// =====================================================
+// Additional Coverage Tests (no Start() calls)
+// =====================================================
+
+// TestScheduler_applyRetentionPolicy_withNonArchiveFiles verifies only .tar.gz files are processed.
+func TestScheduler_applyRetentionPolicy_withNonArchiveFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(tempDir, "memonexus_001.tar.gz"), []byte("archive1"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "readme.txt"), []byte("readme"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "data.json"), []byte("{}"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "memonexus_002.tar.gz"), []byte("archive2"), 0644)
+
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalDaily,
+		RetentionCount: 1,
+		ExportDir:      tempDir,
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	err := scheduler.applyRetentionPolicy(ctx)
+
+	if err != nil {
+		t.Fatalf("applyRetentionPolicy() error = %v", err)
+	}
+
+	files, _ := os.ReadDir(tempDir)
+	if len(files) != 3 {
+		t.Errorf("Expected 3 files (1 archive + 2 non-archives), got %d", len(files))
+	}
+}
+
+// TestScheduler_applyRetentionPolicy_exactlyRetentionCount verifies no deletion when at limit.
+func TestScheduler_applyRetentionPolicy_exactlyRetentionCount(t *testing.T) {
+	tempDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(tempDir, "memonexus_001.tar.gz"), []byte("archive1"), 0644)
+	os.WriteFile(filepath.Join(tempDir, "memonexus_002.tar.gz"), []byte("archive2"), 0644)
+
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalDaily,
+		RetentionCount: 2,
+		ExportDir:      tempDir,
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	err := scheduler.applyRetentionPolicy(ctx)
+
+	if err != nil {
+		t.Fatalf("applyRetentionPolicy() error = %v", err)
+	}
+
+	files, _ := os.ReadDir(tempDir)
+	if len(files) != 2 {
+		t.Errorf("Expected 2 files (at retention limit), got %d", len(files))
+	}
+}
+
+// TestScheduler_applyRetentionPolicy_fewerThanRetention verifies no deletion when under limit.
+func TestScheduler_applyRetentionPolicy_fewerThanRetention(t *testing.T) {
+	tempDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(tempDir, "memonexus_001.tar.gz"), []byte("archive1"), 0644)
+
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalDaily,
+		RetentionCount: 5,
+		ExportDir:      tempDir,
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	err := scheduler.applyRetentionPolicy(ctx)
+
+	if err != nil {
+		t.Fatalf("applyRetentionPolicy() error = %v", err)
+	}
+
+	files, _ := os.ReadDir(tempDir)
+	if len(files) != 1 {
+		t.Errorf("Expected 1 file (under retention limit), got %d", len(files))
+	}
+}
+
+// TestScheduler_UpdateConfig_withManualMode verifies config update in manual mode.
+func TestScheduler_UpdateConfig_withManualMode(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: t.TempDir(),
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	scheduler.Start(ctx)
+
+	// Update from manual to daily
+	newConfig := &SchedulerConfig{
+		Interval:       IntervalDaily,
+		RetentionCount: 10,
+		IncludeMedia:   false,
+		ExportDir:      t.TempDir(),
+	}
+
+	err := scheduler.UpdateConfig(newConfig)
+
+	if err != nil {
+		t.Fatalf("UpdateConfig() error = %v", err)
+	}
+
+	if scheduler.config.Interval != IntervalDaily {
+		t.Errorf("Interval should be updated to 'daily', got %q", scheduler.config.Interval)
+	}
+
+	scheduler.Stop()
+}
+
+// TestScheduler_GetConfig_returnsSamePointer verifies GetConfig returns config pointer.
+func TestScheduler_GetConfig_returnsSamePointer(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalDaily,
+		RetentionCount: 5,
+		IncludeMedia:   true,
+		ExportDir:      "test-exports",
+		Password:       "test-password",
+	}
+	scheduler := NewScheduler(service, config)
+
+	retrieved := scheduler.GetConfig()
+
+	if retrieved != config {
+		t.Error("GetConfig() should return the same config pointer")
+	}
+
+	retrieved.RetentionCount = 10
+	if scheduler.config.RetentionCount != 10 {
+		t.Error("Modifying returned config should affect scheduler")
+	}
+}
+
+// =====================================================
+// Additional Edge Case Tests for Coverage
+// =====================================================
+
+// TestScheduler_runExport_withNoRetention verifies export with retention disabled.
+func TestScheduler_runExport_withNoRetention(t *testing.T) {
+	tempDir := t.TempDir()
+
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalManual,
+		RetentionCount: 0, // No retention limit
+		IncludeMedia:   false,
+		ExportDir:      tempDir,
+		Password:       "",
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+
+	// Recover from panic since ExportService requires database
+	defer func() {
+		if r := recover(); r != nil {
+			// Expected panic due to nil database repository
+			t.Logf("runExport() panicked as expected without database: %v", r)
+		}
+	}()
+
+	err := scheduler.runExport(ctx)
+
+	// If no panic, we expect an error (due to nil database)
+	if err == nil {
+		t.Error("runExport() without database should return error or panic")
+	}
+}
+
+// TestScheduler_runExport_withRetention verifies export with retention enabled.
+func TestScheduler_runExport_withRetention(t *testing.T) {
+	tempDir := t.TempDir()
+
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:       IntervalManual,
+		RetentionCount: 5, // Retention enabled
+		IncludeMedia:   false,
+		ExportDir:      tempDir,
+		Password:       "",
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+
+	// Recover from panic since ExportService requires database
+	defer func() {
+		if r := recover(); r != nil {
+			// Expected panic due to nil database repository
+			t.Logf("runExport() panicked as expected without database: %v", r)
+		}
+	}()
+
+	err := scheduler.runExport(ctx)
+
+	// If no panic, we expect an error (due to nil database)
+	if err == nil {
+		t.Error("runExport() without database should return error or panic")
+	}
+}
+
+// TestScheduler_intervalDuration_allValidIntervals verifies all valid intervals.
+func TestScheduler_intervalDuration_allValidIntervals(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval ExportInterval
+		expected time.Duration
+	}{
+		{"daily", IntervalDaily, 24 * time.Hour},
+		{"weekly", IntervalWeekly, 7 * 24 * time.Hour},
+		{"monthly", IntervalMonthly, 30 * 24 * time.Hour},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &export.ExportService{}
+			config := &SchedulerConfig{Interval: tt.interval}
+			scheduler := NewScheduler(service, config)
+
+			duration, err := scheduler.intervalDuration()
+
+			if err != nil {
+				t.Fatalf("intervalDuration() with %s returned error: %v", tt.interval, err)
+			}
+
+			if duration != tt.expected {
+				t.Errorf("intervalDuration() = %v, want %v", duration, tt.expected)
+			}
+		})
+	}
+}
+
+// TestScheduler_Start_withInvalidService verifies Start with nil service.
+func TestScheduler_Start_withInvalidService(t *testing.T) {
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: t.TempDir(),
+	}
+	scheduler := NewScheduler(nil, config)
+
+	ctx := context.Background()
+	err := scheduler.Start(ctx)
+
+	// Manual mode should start without immediate export
+	if err != nil {
+		t.Fatalf("Start() with nil service in manual mode should not error, got: %v", err)
+	}
+
+	scheduler.Stop()
+}
+
+// TestScheduler_UpdateConfig_nilConfig verifies nil config handling.
+func TestScheduler_UpdateConfig_nilConfig(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: t.TempDir(),
+	}
+	scheduler := NewScheduler(service, config)
+
+	// Store original config for comparison
+	originalConfig := scheduler.GetConfig()
+
+	// Update with nil config - should accept nil (though not recommended)
+	err := scheduler.UpdateConfig(nil)
+
+	// UpdateConfig accepts nil and returns nil error
+	if err != nil {
+		t.Errorf("UpdateConfig() with nil config should not return error, got: %v", err)
+	}
+
+	// Config is now nil (this is the actual behavior, though not ideal)
+	if scheduler.GetConfig() != nil {
+		t.Error("Config should be nil after UpdateConfig(nil)")
+	}
+
+	// Restore original config to prevent issues in teardown
+	scheduler.config = originalConfig
+}
+
+// TestScheduler_NewScheduler_withDefaultValues verifies default value handling.
+func TestScheduler_NewScheduler_withDefaultValues(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval: IntervalManual,
+		// ExportDir is empty - should default to "exports"
+		// RetentionCount is negative - should default to 0
+		RetentionCount: -1,
+	}
+
+	scheduler := NewScheduler(service, config)
+
+	if scheduler.config.ExportDir != "exports" {
+		t.Errorf("ExportDir should default to 'exports', got %q", scheduler.config.ExportDir)
+	}
+
+	if scheduler.config.RetentionCount != 0 {
+		t.Errorf("RetentionCount should default to 0, got %d", scheduler.config.RetentionCount)
+	}
+}
+
+// TestScheduler_UpdateConfig_afterStart verifies UpdateConfig behavior when scheduler is started.
+func TestScheduler_UpdateConfig_afterStart(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:      IntervalManual,
+		ExportDir:     t.TempDir(),
+		RetentionCount: 5,
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	if err := scheduler.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// In manual mode, ticker is nil, so UpdateConfig won't trigger Stop path
+	newConfig := &SchedulerConfig{
+		Interval:      IntervalManual,
+		ExportDir:     config.ExportDir,
+		RetentionCount: 10,
+	}
+	if err := scheduler.UpdateConfig(newConfig); err != nil {
+		t.Errorf("UpdateConfig() error = %v", err)
+	}
+
+	if scheduler.GetConfig().RetentionCount != 10 {
+		t.Errorf("RetentionCount = %d, want 10", scheduler.GetConfig().RetentionCount)
+	}
+
+	scheduler.Stop()
+}
+
+// TestScheduler_Stop_withNilTicker verifies Stop handles nil ticker.
+func TestScheduler_Stop_withNilTicker(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: t.TempDir(),
+	}
+	scheduler := NewScheduler(service, config)
+
+	// Don't call Start, so ticker is nil
+	// Stop should handle this gracefully
+	scheduler.Stop()
+
+	// Verify stopCh is closed by trying to receive from it
+	select {
+	case <-scheduler.stopCh:
+		// Expected - channel is closed
+	default:
+		t.Error("stopCh should be closed after Stop()")
+	}
+}
+
+// TestScheduler_listArchives_withInvalidDirectory verifies listArchives with invalid directory.
+func TestScheduler_listArchives_withInvalidDirectory(t *testing.T) {
+	// Create a file instead of a directory
+	tempFile, err := os.CreateTemp("", "testfile_*.txt")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	tempFile.Close()
+
+	// listArchives should handle file path gracefully
+	archives, err := listArchives(tempFile.Name())
+
+	if err != nil {
+		// File path may cause an error, which is acceptable
+		t.Logf("listArchives with file path returned error (acceptable): %v", err)
+	}
+
+	if archives != nil && len(archives) > 0 {
+		t.Errorf("listArchives with file path should return empty or error, got %d archives", len(archives))
+	}
+}
+
+// TestScheduler_applyRetentionPolicy_sorting verifies archives are sorted by modification time.
+func TestScheduler_applyRetentionPolicy_sorting(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create archives with different timestamps
+	archives := []struct {
+		name    string
+		content string
+	}{
+		{"memonexus_20240101_120000.tar.gz", "old1"},
+		{"memonexus_20240105_120000.tar.gz", "middle1"},
+		{"memonexus_20240103_120000.tar.gz", "old2"},
+		{"memonexus_20240107_120000.tar.gz", "new"},
+		{"memonexus_20240102_120000.tar.gz", "old3"},
+	}
+
+	// Create files with different timestamps by setting mod times
+	baseTime := time.Now().Add(-30 * 24 * time.Hour)
+	for i, arch := range archives {
+		path := filepath.Join(tempDir, arch.name)
+		if err := os.WriteFile(path, []byte(arch.content), 0644); err != nil {
+			t.Fatalf("Failed to create archive %s: %v", arch.name, err)
+		}
+		// Set different modification times
+		modTime := baseTime.Add(time.Duration(i) * 24 * time.Hour)
+		if err := os.Chtimes(path, modTime, modTime); err != nil {
+			t.Fatalf("Failed to set mod time for %s: %v", arch.name, err)
+		}
+	}
+
+	// Create scheduler with retention of 3
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:      IntervalManual,
+		ExportDir:     tempDir,
+		RetentionCount: 3,
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	if err := scheduler.applyRetentionPolicy(ctx); err != nil {
+		t.Fatalf("applyRetentionPolicy() error = %v", err)
+	}
+
+	// Should keep only 3 most recent files (by mod time)
+	remaining, _ := os.ReadDir(tempDir)
+	if len(remaining) != 3 {
+		t.Errorf("After retention policy, should have 3 archives, got %d", len(remaining))
+	}
+}
+
+// TestScheduler_UpdateConfig_preservesRunningState verifies UpdateConfig behavior with running scheduler.
+func TestScheduler_UpdateConfig_preservesRunningState(t *testing.T) {
+	service := &export.ExportService{}
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: t.TempDir(),
+	}
+	scheduler := NewScheduler(service, config)
+
+	ctx := context.Background()
+	if err := scheduler.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Store the original stopCh
+	originalStopCh := scheduler.stopCh
+
+	// Update config - in manual mode ticker is nil, so Stop won't be called
+	newConfig := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: config.ExportDir,
+	}
+	if err := scheduler.UpdateConfig(newConfig); err != nil {
+		t.Errorf("UpdateConfig() error = %v", err)
+	}
+
+	// Since ticker is nil in manual mode, stopCh should not be reset
+	if scheduler.stopCh != originalStopCh {
+		t.Error("stopCh should not change when ticker is nil")
+	}
+}
+
+// =====================================================
+// Mock ExportService Tests
+// These tests use MockExportService to improve coverage
+// =====================================================
+
+// TestScheduler_runExport_withMockService verifies runExport with mock service.
+func TestScheduler_runExport_withMockService(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockService := export.NewMockExportService()
+
+	config := &SchedulerConfig{
+		Interval:       IntervalManual,
+		RetentionCount: 2,
+		IncludeMedia:   false,
+		ExportDir:      tempDir,
+		Password:       "",
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	ctx := context.Background()
+	err := scheduler.runExport(ctx)
+
+	if err != nil {
+		t.Errorf("runExport() with mock service failed: %v", err)
+	}
+
+	if !mockService.WasExportCalled() {
+		t.Error("Export should have been called")
+	}
+
+	// Verify export file was created at the actual path used by mock
+	exportPath := mockService.GetExportPath()
+	if _, err := os.Stat(exportPath); os.IsNotExist(err) {
+		t.Errorf("Export file was not created at %s", exportPath)
+	}
+}
+
+// TestScheduler_runExport_withMockServiceError verifies error handling.
+func TestScheduler_runExport_withMockServiceError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockService := export.NewMockExportService()
+	mockService.SetShouldSucceed(false)
+
+	config := &SchedulerConfig{
+		Interval:       IntervalManual,
+		RetentionCount: 2,
+		IncludeMedia:   false,
+		ExportDir:      tempDir,
+		Password:       "",
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	ctx := context.Background()
+	err := scheduler.runExport(ctx)
+
+	if err == nil {
+		t.Error("runExport() with failing mock service should return error")
+	}
+
+	if !mockService.WasExportCalled() {
+		t.Error("Export should still have been called despite error")
+	}
+}
+
+// TestScheduler_Start_withMockService verifies Start with mock service.
+// This test covers the goroutine path in Start() that was previously unreachable.
+func TestScheduler_Start_withMockService(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockService := export.NewMockExportService()
+
+	config := &SchedulerConfig{
+		Interval:  IntervalDaily,
+		ExportDir: tempDir,
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	// Use a short timeout to avoid long test runs
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	err := scheduler.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() with mock service failed: %v", err)
+	}
+
+	// Wait for context to timeout
+	<-ctx.Done()
+
+	scheduler.Stop()
+
+	// Verify Export was called (at least once due to immediate export)
+	if !mockService.WasExportCalled() {
+		t.Error("Export should have been called at least once")
+	}
+
+	t.Logf("Export was called %d times", mockService.GetCallCount())
+}
+
+// TestScheduler_Start_manualMode_withMockService verifies manual mode with mock service.
+func TestScheduler_Start_manualMode_withMockService(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockService := export.NewMockExportService()
+
+	config := &SchedulerConfig{
+		Interval:  IntervalManual,
+		ExportDir: tempDir,
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	ctx := context.Background()
+	err := scheduler.Start(ctx)
+
+	if err != nil {
+		t.Fatalf("Start() in manual mode failed: %v", err)
+	}
+
+	if scheduler.ticker != nil {
+		t.Error("Manual mode should not create ticker")
+	}
+
+	scheduler.Stop()
+
+	// In manual mode, Export should not be called automatically
+	if mockService.WasExportCalled() {
+		t.Error("Export should not be called in manual mode")
+	}
+}
+
+// TestScheduler_Start_withMockServiceDelayedExport verifies export delay behavior.
+func TestScheduler_Start_withMockServiceDelayedExport(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockService := export.NewMockExportService()
+	// Set a delay to simulate slow export
+	mockService.SetExportDelay(50 * time.Millisecond)
+
+	config := &SchedulerConfig{
+		Interval:  IntervalDaily,
+		ExportDir: tempDir,
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	// Short timeout to test cancellation during export
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Millisecond)
+	defer cancel()
+
+	err := scheduler.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start() with mock service failed: %v", err)
+	}
+
+	<-ctx.Done()
+	scheduler.Stop()
+
+	t.Logf("Export was called %d times with delay", mockService.GetCallCount())
+}
+
+// TestScheduler_applyRetentionPolicy_withMockExport verifies retention with mock.
+func TestScheduler_applyRetentionPolicy_withMockExport(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create some mock archives
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("memonexus_2024010%d_120000.tar.gz", i+1)
+		path := filepath.Join(tempDir, name)
+		os.WriteFile(path, []byte(fmt.Sprintf("archive%d", i)), 0644)
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	mockService := export.NewMockExportService()
+
+	config := &SchedulerConfig{
+		Interval:       IntervalManual,
+		RetentionCount: 2,
+		ExportDir:      tempDir,
+	}
+	scheduler := NewScheduler(mockService, config)
+
+	ctx := context.Background()
+	err := scheduler.runExport(ctx)
+
+	if err != nil {
+		t.Errorf("runExport() failed: %v", err)
+	}
+
+	// Verify retention policy was applied
+	files, _ := os.ReadDir(tempDir)
+	if len(files) != 2 {
+		t.Errorf("Expected 2 files after retention, got %d", len(files))
 	}
 }

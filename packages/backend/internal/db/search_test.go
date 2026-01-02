@@ -3,7 +3,9 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -825,5 +827,174 @@ func TestBatchImportContent_withExistingIDs(t *testing.T) {
 	}
 	if retrieved.Title != "Article 1" {
 		t.Errorf("Expected title 'Article 1', got %s", retrieved.Title)
+	}
+}
+
+// TestSearch_withDateRange tests search with date filters.
+func TestSearch_withDateRange(t *testing.T) {
+	db := setupSearchTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+
+	now := time.Now().Unix()
+	day := int64(86400)
+	weekAgo := now - (7 * day)
+	twoWeeksAgo := now - (14 * day)
+
+	// Insert items with different timestamps using the helper function
+	_ = insertTestContentItem(t, db, "Recent Article", "Recent content about technology", "web", "tech", now)
+	_ = insertTestContentItem(t, db, "Old Article", "Old content about technology", "web", "old", twoWeeksAgo)
+
+	// Search with DateFrom filter (should only find recent items)
+	results, err := repo.Search(&SearchOptions{
+		Query:    "technology",
+		Limit:    10,
+		DateFrom: weekAgo,
+	})
+	if err != nil {
+		t.Fatalf("Search with DateFrom failed: %v", err)
+	}
+	// Should find only the recent article
+	if len(results.Results) == 0 {
+		t.Error("Expected search results with DateFrom filter")
+	}
+
+	// Search with DateTo filter (should only find old items)
+	results, err = repo.Search(&SearchOptions{
+		Query:  "technology",
+		Limit:  10,
+		DateTo: weekAgo,
+	})
+	if err != nil {
+		t.Fatalf("Search with DateTo failed: %v", err)
+	}
+	if len(results.Results) == 0 {
+		t.Error("Expected search results with DateTo filter")
+	}
+}
+
+// TestSearch_withMultipleTags tests search with multiple tag filters.
+func TestSearch_withMultipleTags(t *testing.T) {
+	db := setupSearchTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+
+	now := time.Now().Unix()
+
+	// Insert items with different tags - all contain "About" in content for FTS matching
+	id1 := insertTestContentItem(t, db, "Tech Post", "About technology and programming", "web", "tech,programming", now)
+	id2 := insertTestContentItem(t, db, "Design Post", "About design and art", "web", "design,art", now)
+	id3 := insertTestContentItem(t, db, "Tech Design Post", "About technology and design combined", "web", "tech,design", now)
+	_ = id1
+	_ = id2
+	_ = id3
+
+	// Search with single tag "tech" - should find id1 and id3
+	results, err := repo.Search(&SearchOptions{
+		Query: "About",
+		Limit: 10,
+		Tags:  "tech",
+	})
+	if err != nil {
+		t.Fatalf("Search with single tag failed: %v", err)
+	}
+	// Should find Tech Post and Tech Design Post (both have 'tech' in tags)
+	if len(results.Results) < 2 {
+		t.Errorf("Expected at least 2 results with tag 'tech', got %d", len(results.Results))
+		for i, r := range results.Results {
+			t.Logf("  Result %d: %s (tags: %s)", i, r.Item.Title, r.Item.Tags)
+		}
+	}
+
+	// Search with multiple tags (OR logic) - should find id2 and id3
+	results, err = repo.Search(&SearchOptions{
+		Query: "About",
+		Limit: 10,
+		Tags:  "design,art",
+	})
+	if err != nil {
+		t.Fatalf("Search with multiple tags failed: %v", err)
+	}
+	// Should find Design Post and Tech Design Post (both have 'design' or 'art' in tags)
+	if len(results.Results) < 2 {
+		t.Errorf("Expected at least 2 results with tags 'design,art', got %d", len(results.Results))
+		for i, r := range results.Results {
+			t.Logf("  Result %d: %s (tags: %s)", i, r.Item.Title, r.Item.Tags)
+		}
+	}
+}
+
+// TestSearch_emptyQuery tests that empty query returns error.
+func TestSearch_emptyQuery(t *testing.T) {
+	db := setupSearchTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+
+	// Empty query should return error
+	_, err := repo.Search(&SearchOptions{
+		Query: "",
+		Limit: 10,
+	})
+	if err == nil {
+		t.Error("Search with empty query should return error")
+	}
+	if !strings.Contains(err.Error(), "required") {
+		t.Errorf("Error should mention 'required', got: %v", err)
+	}
+
+	// Nil options should return error
+	_, err = repo.Search(nil)
+	if err == nil {
+		t.Error("Search with nil options should return error")
+	}
+}
+
+// TestSearch_limitBounds tests that limit defaults and max are applied.
+func TestSearch_limitBounds(t *testing.T) {
+	db := setupSearchTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+
+	// Create test items
+	for i := 0; i < 5; i++ {
+		item := &models.ContentItem{
+			Title:       fmt.Sprintf("Item %d", i),
+			ContentText: fmt.Sprintf("Content %d", i),
+			MediaType:   "web",
+			CreatedAt:   time.Now().Unix(),
+			UpdatedAt:   time.Now().Unix(),
+			Version:     1,
+		}
+		if err := repo.CreateContentItem(item); err != nil {
+			t.Fatalf("Failed to create item %d: %v", i, err)
+		}
+	}
+
+	// Test with limit = 0 (should default to 20)
+	results, err := repo.Search(&SearchOptions{
+		Query: "Item",
+		Limit: 0,
+	})
+	if err != nil {
+		t.Fatalf("Search with limit=0 failed: %v", err)
+	}
+	if len(results.Results) > 20 {
+		t.Errorf("With limit=0, should default to max 20, got %d", len(results.Results))
+	}
+
+	// Test with limit > 100 (should be capped at 100)
+	results, err = repo.Search(&SearchOptions{
+		Query: "Item",
+		Limit: 200,
+	})
+	if err != nil {
+		t.Fatalf("Search with limit=200 failed: %v", err)
+	}
+	if len(results.Results) > 100 {
+		t.Errorf("With limit=200, should be capped at 100, got %d", len(results.Results))
 	}
 }
