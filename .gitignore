@@ -7,7 +7,8 @@
 *.test
 *.out
 vendor/
-go.work
+
+# Note: go.work and go.work.sum should be committed to version control
 
 # Flutter / Dart
 apps/frontend/build/
@@ -62,3 +63,6 @@ out/
 *.tmp
 *.bak
 *.cache
+
+# Test exports
+packages/backend/internal/export/exports/

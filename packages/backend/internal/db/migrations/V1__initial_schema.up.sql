@@ -10,7 +10,7 @@
 -- Schema Version Tracking
 -- =====================================================
 
-CREATE TABLE schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY CHECK(version > 0),
     applied_at INTEGER NOT NULL CHECK(applied_at > 0),
     description TEXT NOT NULL CHECK(length(description) > 0),
@@ -223,10 +223,7 @@ CREATE TRIGGER content_items_au AFTER UPDATE ON content_items BEGIN
 END;
 
 -- =====================================================
--- Seed Initial Migration Record
+-- Migration Tracking Note
 -- =====================================================
-
-INSERT INTO schema_migrations (version, applied_at, description, checksum)
-VALUES (1, strftime('%s', 'now'), 'Initial schema with FTS5 and sync tables',
-        -- SHA-256 checksum placeholder (computed from migration SQL content)
-        '0000000000000000000000000000000000000000000000000000000000000000');
+-- The migration system (migrate.go) automatically records this migration
+-- in the schema_migrations table with version, timestamp, and checksum.

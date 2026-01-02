@@ -30,11 +30,11 @@ import (
 
 // ExportService provides export/import functionality.
 type ExportService struct {
-	repo *db.Repository
+	repo db.ContentItemRepository
 }
 
 // NewExportService creates a new ExportService.
-func NewExportService(repo *db.Repository) *ExportService {
+func NewExportService(repo db.ContentItemRepository) *ExportService {
 	return &ExportService{repo: repo}
 }
 

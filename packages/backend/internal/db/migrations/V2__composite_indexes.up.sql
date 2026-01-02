@@ -35,9 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_status_next_retry_at
 ON sync_queue(status, next_retry_at);
 
 -- =====================================================
--- Update schema migrations
+-- Migration Tracking Note
 -- =====================================================
-
-INSERT INTO schema_migrations (version, applied_at, description, checksum)
-VALUES (2, strftime('%s', 'now'), 'Add composite indexes for query optimization',
-        '0000000000000000000000000000000000000000000000000000000000000000');
+-- The migration system (migrate.go) automatically records this migration
+-- in the schema_migrations table with version, timestamp, and checksum.
